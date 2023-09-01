@@ -1,0 +1,165 @@
+# Using backtesting.py to test SMC strat
+
+import pandas as pd
+import numpy as np
+import yfinance as yf
+from backtesting import Backtest, Strategy
+from backtesting.test import GOOG
+from backtesting.lib import crossover, plot_heatmaps, resample_apply, barssince
+import talib
+import seaborn as sns
+import matplotlib.pyplot as plt
+import mplfinance as mpf
+
+
+
+# min15_data = yf.download(tickers = 'GBPUSD=X' ,start="2023-06-01", end="2023-6-27", interval = '15m')
+h1_data = yf.download(tickers = 'GBPUSD=X' ,start="2023-06-01", end="2023-6-27", interval = '1h')
+# Resample to 4-hour data with custom time offset
+h4_data = h1_data.resample('4H', offset='2H').agg({
+    'Open': 'first',
+    'High': 'max',
+    'Low': 'min',
+    'Close': 'last',
+    'Volume': 'sum'
+})
+
+# fractal identification is a bit off. need to fix
+def identify_fractals(data):
+    fractal_period = 5
+    fractal_dates = []
+
+    def is_bill_williams_fractal(high, low, index):
+        if index < 4 or index >= len(high) - 4:
+            return False
+        fractal_high = high[index]
+        fractal_low = low[index]
+        is_high = fractal_high >= max(high[index - 2:index + 3]) and fractal_high >= max(high[index - 1:index + 4])
+        is_low = fractal_low <= min(low[index - 2:index + 3]) and fractal_low <= min(low[index - 1:index + 4])
+        return is_high or is_low
+
+    def is_regular_fractal(high, low, index):
+        if index < fractal_period or index >= len(high):
+            return False
+        fractal_high = high[index]
+        fractal_low = low[index]
+        is_high = fractal_high >= max(high[index - fractal_period:index + 1])
+        is_low = fractal_low <= min(low[index - fractal_period:index + 1])
+        return is_high or is_low
+
+    for i in range(len(data)):
+        if is_bill_williams_fractal(data['High'], data['Low'], i):
+            fractal_dates.append((data.index[i], 'fractal_high'))
+        elif is_regular_fractal(data['High'], data['Low'], i):
+            fractal_dates.append((data.index[i], 'fractal_low'))
+
+    data['Fractal'] = ''
+    for date, fractal_type in fractal_dates:
+        data.loc[date, 'Fractal'] = fractal_type
+
+    # Filter consecutive "fractal_low" and keep only the lowest low
+    mask = data['Fractal'] == 'fractal_low'
+    consecutive_groups = (mask != mask.shift()).cumsum()
+    for group_id, group_data in data[mask].groupby(consecutive_groups):
+        lowest_low_index = group_data['Low'].idxmin()
+        data.loc[group_data.index, 'Fractal'] = ''
+        data.loc[lowest_low_index, 'Fractal'] = 'fractal_low'
+
+    # Filter consecutive "fractal_high" and keep only the highest high
+    mask = data['Fractal'] == 'fractal_high'
+    consecutive_groups = (mask != mask.shift()).cumsum()
+    for group_id, group_data in data[mask].groupby(consecutive_groups):
+        highest_high_index = group_data['High'].idxmax()
+        data.loc[group_data.index, 'Fractal'] = ''
+        data.loc[highest_high_index, 'Fractal'] = 'fractal_high'
+
+    return data
+
+# Identify fractals in H4 data
+h4_data_fractal = identify_fractals(h4_data)
+h4_data_fractal = h4_data_fractal.dropna(subset=['Open'])
+# print("fractals", h4_data_fractal.to_string())
+
+#############################
+
+# Create the list to hold the addplots
+addplots = []
+
+# Get the indexes of fractal highs and lows
+fractal_high_indexes = h4_data_fractal[h4_data_fractal['Fractal'] == 'fractal_high'].index
+fractal_low_indexes = h4_data_fractal[h4_data_fractal['Fractal'] == 'fractal_low'].index
+
+# Create the scatter plot data
+fractal_highs = pd.Series(h4_data_fractal.loc[h4_data_fractal['Fractal'] == 'fractal_high', 'High'], index=fractal_high_indexes)
+fractal_lows = pd.Series(h4_data_fractal.loc[h4_data_fractal['Fractal'] == 'fractal_low', 'Low'], index=fractal_low_indexes)
+
+# Add the scatter plot of fractal highs
+addplot_highs = mpf.make_addplot(
+    fractal_highs,
+    scatter=True,
+    marker='^',
+    color='green',
+    markersize=100,
+    panel=1
+)
+addplots.append(addplot_highs)
+
+# Add the scatter plot of fractal lows
+addplot_lows = mpf.make_addplot(
+    fractal_lows,
+    scatter=True,
+    marker='v',
+    color='red',
+    markersize=100,
+    panel=1
+)
+addplots.append(addplot_lows)
+
+# Plot the candlestick chart with the addplots
+mpf.plot(h4_data, type='candle', addplot=addplots, ylabel='Price')
+
+
+#############################
+
+"""
+class SMC(Strategy): 
+
+    position_exposure = 0.01 #1% of available cash position
+    Stop_Pips = 2
+    
+    n1 = 10
+    n2 = 50
+
+    def init(self):
+
+        h4_data_fractal = identify_fractals(h4_data)
+        min15_data_fractal = identify_fractals(min15_data)
+
+        print("4h data", h4_data_fractal.to_string())
+        # print("15min data", min15_data_fractal.to_string())
+
+    def next(self):
+        pass
+        price = self.data.Close[-1]
+        Long_StopLoss = price - self.Stop_Pips*0.01
+        Long_Size = (self.position_exposure * self.equity) / self.Stop_Pips
+        Short_StopLoss = price + self.Stop_Pips*0.01
+        Short_Size = (self.position_exposure * self.equity) / self.Stop_Pips
+
+        
+        if crossover(self.sma1, self.sma2):
+            self.position.close()
+
+
+        elif crossover(self.sma2, self.sma1):
+            self.buy(tp = (3*self.Stop_Pips)+price , sl=Long_StopLoss, size=0.01)
+         
+
+            
+# Run backtest and print stats/plot
+bt = Backtest(h1_data, SMC, cash = 5_000)
+stats=bt.run()
+bt.plot()
+# print(stats)
+# print(stats['_trades']).to_string()
+"""

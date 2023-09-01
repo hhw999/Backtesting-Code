@@ -1,0 +1,50 @@
+import pandas as pd
+import requests
+
+# Replace 'YOUR_ACCESS_KEY' with your Marketstack API access key
+access_key = 'c66c651dd0de1faea164ea654c55d142'
+
+# Define the API endpoint URLs
+base_url = 'https://api.marketstack.com/v1'
+intraday_url = f'{base_url}/intraday'
+eod_url = f'{base_url}/eod'
+
+# Set the date range for the data
+start_date = '2022-01-01'
+end_date = '2022-12-31'
+
+# Define the symbols and intervals
+symbols = ['GBPUSD']
+intervals = ['15min', '4h']
+
+# Fetch and save 15-minute and 4-hour data
+for symbol in symbols:
+    for interval in intervals:
+        params = {
+            'access_key': access_key,
+            'symbols': symbol,
+            'interval': interval,
+            'date_from': start_date,
+            'date_to': end_date,
+        }
+
+        response = requests.get(intraday_url, params=params)
+        data = response.json()
+
+        if 'data' in data:
+            df = pd.DataFrame(data['data'])
+            df.set_index('date', inplace=True)
+            filename = f'{symbol}_{interval}_data.csv'
+            df.to_csv(filename)
+            print(f'Saved {filename}')
+
+# Read the saved data
+for symbol in symbols:
+    for interval in intervals:
+        filename = f'{symbol}_{interval}_data.csv'
+        try:
+            df = pd.read_csv(filename, index_col='date')
+            print(f'{symbol}_{interval}_data:')
+            print(df)
+        except FileNotFoundError:
+            print(f'No data found for {symbol} and {interval}')

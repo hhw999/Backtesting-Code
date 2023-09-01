@@ -1,0 +1,52 @@
+import pandas as pd
+from alpha_vantage.timeseries import TimeSeries
+import time
+
+api_key = 'QKOBDHQEO1I111IL'
+ts = TimeSeries(key=api_key, output_format='pandas')
+
+# Define the date range
+start_date = '2022-06-01'
+end_date = '2023-05-30'
+
+# Fetch 15-minute data in smaller batches
+batch_size = 1000  # Number of data points per API call
+data_15min = pd.DataFrame()
+
+# Calculate the number of API calls needed
+num_calls = int(((pd.Timestamp(end_date) - pd.Timestamp(start_date)).days + 1) * 24 * 60 / 15 / batch_size)
+
+for i in range(num_calls):
+    data, _ = ts.get_intraday(symbol='GBPUSD', interval='15min', outputsize='full')
+    data_15min = pd.concat([data_15min, data])
+
+    # Adjust the start date for the next batch
+    start_date = pd.Timestamp(data.index[-1]) + pd.DateOffset(minutes=15)
+
+    # Pause for API call rate limit
+    time.sleep(60)
+
+# Filter data based on the date range
+data_15min = data_15min[(data_15min.index >= start_date) & (data_15min.index <= end_date)]
+
+# Fetch 4-hour data
+data_4hour, _ = ts.get_intraday(symbol='GBPUSD', interval='240min', outputsize='full')
+
+# Filter data based on the date range
+data_4hour = data_4hour[(data_4hour.index >= start_date) & (data_4hour.index <= end_date)]
+
+# Save data to CSV files
+data_15min.to_csv('15min_data.csv')
+data_4hour.to_csv('4hour_data.csv')
+
+print("Data saved to CSV files.")
+
+# Script to read the saved data
+df_15min = pd.read_csv('15min_data.csv', index_col='date', parse_dates=True)
+df_4hour = pd.read_csv('4hour_data.csv', index_col='date', parse_dates=True)
+
+print("15-minute data:")
+print(df_15min)
+
+print("4-hour data:")
+print(df_4hour)
