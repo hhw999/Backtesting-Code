@@ -79,7 +79,6 @@ def check_time_range(current_time):
     time_range_1_end = time(10, 30)
     time_range_2_start = time(12, 30)
     time_range_2_end = time(15, 0)
-
     # Check if the time is within either of the defined ranges
     if (time_range_1_start < current_time <= time_range_1_end) or \
         (time_range_2_start < current_time <= time_range_2_end):
@@ -116,6 +115,7 @@ class HTF(Strategy):
 
     directional_bias = 0
     open_orders = []
+    potential_orders = []
 
     def init(self):
         # Resample to 4-hour data with custom time offset
@@ -314,10 +314,9 @@ class HTF(Strategy):
 
         # Convert the last color change timestamp to UTC and extract its time
         last_color_change_time = last_color_change_index.tz_localize(UTC).time()
-
-        if check_time_range(last_color_change_time):    # Returns true when out of KZ
+        if check_time_range(last_color_change_time):    # Returns true when out of KZ which returns check_sweep_origin = False
             return False  
-        else: True                                      # The origin of the sweep is within the kill zone
+        else: return True                                      # The origin of the sweep is within the kill zone
 
 
     def next(self):        
@@ -330,13 +329,21 @@ class HTF(Strategy):
         for index, order in self.open_orders.iterrows():
             if order['IsOpen']:
                 if order['Type'] == 'BUY' and current_bar['High'] >= order['Limit']:
+                    # if a Buy order is filled in the current bar
                     self.open_orders.at[index, 'IsOpen'] = False
                 elif order['Type'] == 'SELL' and current_bar['Low'] <= order['Limit']:
+                    # if a sell order is filled in the current bar
                     self.open_orders.at[index, 'IsOpen'] = False
                 elif order['Type'] == 'BUY' and current_bar['High'] < order['Limit'] and current_bar['Low'] < self.data.Low[-2] and current_index == (order['Datetime'] + pd.Timedelta(minutes=15)):
-                    pass # ADD in continued long entry, cancel order and place new limit order
+                    #continued long entry, cancel order and place new buy limit order
+                    order_to_cancel = order.loc[index]
+                    order_to_cancel.cancel()
+                    self.BUY(current_bar, timestamp_utc)
                 elif order['Type'] == 'SELL' and current_bar['Low'] > order['Limit'] and current_bar['High'] > self.data.High[-2] and current_index == (order['Datetime'] + pd.Timedelta(minutes=15)):
-                    pass # ADD in continued short entry, cancel order and place new limit order
+                    #continued short entry, cancel order and place new sell limit order
+                    order_to_cancel = order.loc[index]
+                    order_to_cancel.cancel()
+                    self.SELL(current_bar, timestamp_utc)
                     
         self.close_pending_orders_after_fill()
     
@@ -353,41 +360,45 @@ class HTF(Strategy):
              (  current_bar['High'] > self.Min15_high and self.Min15_high_validity == 1        and  \
                 current_bar['High'] < self.H4_high and current_bar['Low'] > self.H4_low        ):
             
-            print('Sell side sweep ')
-            print('current bar', current_bar)
-            print('fractal high', self.fractal_high)
-            print('15Min high', self.Min15_high)
-            print('H4 high', self.H4_high)
-            print('H4 low', self.H4_low)
-
             if self.check_sweep_origin(self.min15_data_fractal, current_index):                 #Check if liquidity sweep began within KZ
-                # print('sweep sell side liquidity')
+                print('sweep sell side liquidity in KZ')
                 if current_bar['Low'] > self.H4_equ and self.directional_bias != 0 and self.check_dead_zone(current_bar['Low']):       # FT/NFT
                     self.SELL(current_bar, timestamp_utc)
                 elif self.directional_bias == -2 and self.check_dead_zone(current_bar['Low']):       # IF SFT to the down side
                     self.SELL(current_bar, timestamp_utc)
-                else: return
+                else: 
+                    new_order = pd.DataFrame({
+                        'Datetime': [timestamp_utc],
+                        'Type': ['BUY'], 
+                        'Limit': [current_bar['High']], 
+                        'SL': [],
+                        'TP': [], 
+                        'Size': [self.position_exposure], 
+                        'IsOpen': [True]})
+                    self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
 
         # Sweep Buy side liquidity or Sweep Buy side 15Min range liquidity
         elif (  current_bar['Low'] < self.fractal_low and self.fractal_low_validity == 1          and  \
                 current_bar['High'] < self.H4_high and current_bar['Low'] > self.H4_low         )or  \
              (  current_bar['Low'] < self.Min15_low and self.Min15_low_validity ==1            and  \
                 current_bar['High'] < self.H4_high and current_bar['Low'] > self.H4_low         ):
-            
-            print('Buy side sweep')
-            print('current bar', current_bar)
-            print('fractal low', self.fractal_low)
-            print('15Min low', self.Min15_low)
-            print('H4 high', self.H4_high)
-            print('H4 low', self.H4_low)
 
             if self.check_sweep_origin(self.min15_data_fractal, current_index):                 #Check if liquidity sweep began within KZ
-                # print('buy side liquidity')
+                print('buy side liquidity in KZ')
                 if current_bar['High'] < self.H4_equ and self.directional_bias != 0 and self.check_dead_zone(current_bar['High']):       # FT/NFT
                     self.BUY(current_bar, timestamp_utc)
                 elif self.directional_bias == 2 and self.check_dead_zone(current_bar['High']):       # SFT to the up side
                     self.BUY(current_bar, timestamp_utc)
-                else: return
+                else: 
+                    new_order = pd.DataFrame({
+                        'Datetime': [timestamp_utc],
+                        'Type': ['BUY'], 
+                        'Limit': [current_bar['High']], 
+                        'SL': [],
+                        'TP': [], 
+                        'Size': [self.position_exposure], 
+                        'IsOpen': [True]})
+                    self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
         
         # set H4 range
         if current_index in self.h4_data_fractal.index:
@@ -445,7 +456,8 @@ class HTF(Strategy):
             self.fractal_high_validity = 0
         if current_bar['Low'] < self.fractal_low:
             self.fractal_low_validity = 0 
-
+        
+        # print(self.Limit_orders_not_met)
 
 # Run backtest and print stats/plot
 bt = Backtest(min15_data, HTF, cash = 1_000)
