@@ -88,6 +88,7 @@ def check_time_range(current_time):
 
 def identify_bar(data):
     """Add a 'bar' column with 'Red' or 'Green' based on Close and Open prices."""
+    data = data.copy()
     data['Bar'] = 'Green'  # Initialize 'bar' column with 'Green'
     red_mask = data['Close'] < data['Open']  # Create a mask for 'Red' bars
     data.loc[red_mask, 'Bar'] = 'Red'  # Set 'bar' to 'Red' for rows where Close < Open
@@ -298,7 +299,6 @@ class HTF(Strategy):
     def check_dead_zone(self, Entry_Price):
         """Check if current entry price is within Kill zone. Return True if entry price is not in Dead Zone (+-10% around EQU.)"""
         if self.upper_dead > Entry_Price > self.lower_dead:
-            print("In dead_zone", self.upper_dead, self.lower_dead, Entry_Price)            
             return False
 
         else: return True
@@ -364,7 +364,6 @@ class HTF(Strategy):
                     current_bar['High'] < self.H4_high and current_bar['Low'] > self.H4_low        ):
                 
                 if self.check_sweep_origin(self.min15_data_fractal, current_index):                 #Check if liquidity sweep began within KZ
-                    print('sweep sell side liquidity, sweep within KZ')
                     if current_bar['Low'] > self.H4_equ and self.directional_bias != 0 and self.check_dead_zone(current_bar['Low']):       # FT/NFT
                         self.SELL(current_bar, timestamp_utc)
                     elif self.directional_bias == -2 and self.check_dead_zone(current_bar['Low']):       # IF SFT to the down side
@@ -389,7 +388,6 @@ class HTF(Strategy):
                     current_bar['High'] < self.H4_high and current_bar['Low'] > self.H4_low         ):
 
                 if self.check_sweep_origin(self.min15_data_fractal, current_index):                 #Check if liquidity sweep began within KZ
-                    print('buy side liquidity, sweep within KZ')
                     if current_bar['High'] < self.H4_equ and self.directional_bias != 0 and self.check_dead_zone(current_bar['High']):       # FT/NFT
                         self.BUY(current_bar, timestamp_utc)
                     elif self.directional_bias == 2 and self.check_dead_zone(current_bar['High']):       # SFT to the up side
@@ -409,10 +407,10 @@ class HTF(Strategy):
             
             # Delayed entry. If a liquidity sweep was originally invalid but continued until entry is below/above equ
             elif not self.potential_orders.empty:
+                rows_to_delete = []
                 for index, order in self.potential_orders.iterrows():
                     if order['Type'] == 'BUY' and current_bar['High'] < self.H4_equ and order['Bar'] == current_bar['Bar']: 
                         self.BUY(current_bar, timestamp_utc)
-                        print('Delayed buy')
                     
                     elif order['Type'] == 'BUY' and current_bar['High'] >= self.H4_equ and order['Bar'] == current_bar['Bar']: 
                         # drop the last potential order bar
@@ -428,11 +426,9 @@ class HTF(Strategy):
                             'IsOpen': [True],
                             'Bar': [current_bar['Bar']] })
                         self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
-                        print('extend delay')
                     
                     elif order['Type'] == 'SELL' and current_bar['Low'] > self.H4_equ and order['Bar'] == current_bar['Bar']: 
                         self.SELL(current_bar, timestamp_utc)
-                        print('Delayed sell')
                     
                     elif order['Type'] == 'SELL' and current_bar['High'] <= self.H4_equ and order['Bar'] == current_bar['Bar']: 
                         # Drop the last potential order bar
@@ -448,12 +444,12 @@ class HTF(Strategy):
                             'IsOpen': [True],
                             'Bar': [current_bar['Bar']] })
                         self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
-                        print('extend delay')
                     
                     elif order['Bar'] != current_bar['Bar']:
-                        self.potential_orders.drop(index, inplace=True)
-                        print('kill delaied entry')
+                        rows_to_delete.append(index)
                     else: print('something is wrong with delayed orders')
+                self.potential_orders.drop(rows_to_delete, inplace=True)
+
 
         # set H4 range
         if current_index in self.h4_data_fractal.index:
