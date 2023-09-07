@@ -7,7 +7,7 @@ from datetime import datetime, time
 from pytz import UTC  # Import the UTC timezone from pytz library
 
 # Download the data 
-#(return = +2% in 6 total placed trades accross the 2x weeks between 8/8/23 to 19/8/23 when traded manually)
+# (return = +2% in 6 total placed trades accross the 2x weeks between 8/8/23 to 19/8/23 when traded manually)
 min15_data = yf.download(tickers = 'GBPUSD=X' ,start="2023-8-6", end="2023-8-19", interval = '15m')
 
 def identify_fractals(data):
@@ -172,8 +172,8 @@ class HTF(Strategy):
         fig, axlist = mpf.plot(self.h4_data_fractal, type='candle', addplot=addplot_bar, ylabel='Price', tight_layout=True, returnfig=True)
         mpf.show()
         
-
     def update_H4_range(self, current_bar):
+        """Updates H4 range to define trading range"""
         if current_bar['High'] > self.H4_high:
             self.H4_high = current_bar['High']
             
@@ -345,7 +345,6 @@ class HTF(Strategy):
             return False  
         else: return True                                      # The origin of the sweep is within the kill zone
 
-
     def next(self):        
         current_index = self.data.index[-1]  
         current_bar = self.min15_data_fractal.loc[current_index]
@@ -364,7 +363,7 @@ class HTF(Strategy):
                     self.open_orders.at[index, 'IsOpen'] = False
                 
                 elif order['Type'] == 'BUY' and current_bar['High'] < order['Limit'] and current_bar['Low'] < self.data.Low[-2] and current_index == (order['Datetime'] + pd.Timedelta(minutes=15)):
-                    #continued long entry, cancel order and place new buy limit order
+                    # continued long entry, cancel order and place new buy limit order
                     order_to_cancel = order.loc[index]
                     print('orders before:', self.open_orders)
                     order_to_cancel.cancel() #I DONT THINK THIS CANCEL IS WORKING 
@@ -373,7 +372,7 @@ class HTF(Strategy):
                     self.BUY(current_bar, timestamp_utc)
                
                 elif order['Type'] == 'SELL' and current_bar['Low'] > order['Limit'] and current_bar['High'] > self.data.High[-2] and current_index == (order['Datetime'] + pd.Timedelta(minutes=15)):
-                    #continued short entry, cancel order and place new sell limit order
+                    # continued short entry, cancel order and place new sell limit order
                     order_to_cancel = order.loc[index]
                     print('orders before:', self.open_orders)
 
@@ -481,7 +480,6 @@ class HTF(Strategy):
                         rows_to_delete.append(index)
                     else: print('something is wrong with delayed orders')
                 self.potential_orders.drop(rows_to_delete, inplace=True)
-
 
         # set H4 range
         if current_index in self.h4_data_fractal.index:
