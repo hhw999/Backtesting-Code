@@ -141,43 +141,43 @@ class HTF(Strategy):
         self.pending_orders = []  # Track pending orders
         self.potential_orders = pd.DataFrame(columns=['Datetime', 'Type', 'Limit', 'SL', 'TP', 'Size', 'IsOpen'])
 
-
-        """ plot of price and fractals line chart
-        fractal_values = []
+        print(self.h4_data_fractal)
+        #  plot of price and fractals line chart
+        self.fractal_values = []
         # append fractals to data to fractal values for plot
-        for index in h4_data_fractal.index:
-            if h4_data_fractal.loc[index, 'Fractal'] == 'fractal_high':
-                fractal_values.append(1)
-            elif h4_data_fractal.loc[index, 'Fractal'] == 'fractal_low':
-                fractal_values.append(-1)
+        for index in self.h4_data_fractal.index:
+            if self.h4_data_fractal.loc[index, 'Fractal'] == 'fractal_high':
+                self.fractal_values.append(1)
+            elif self.h4_data_fractal.loc[index, 'Fractal'] == 'fractal_low':
+                self.fractal_values.append(-1)
             else:
-                fractal_values.append(0)
-        for index in min15_data_fractal.index:
-            if h4_data_fractal.loc[index, 'Fractal'] == 'fractal_high':
-                fractal_values.append(1)
-            elif h4_data_fractal.loc[index, 'Fractal'] == 'fractal_low':
-                fractal_values.append(-1)
+                self.fractal_values.append(0)
+        for index in self.min15_data_fractal.index:
+            if self.h4_data_fractal.loc[index, 'Fractal'] == 'fractal_high':
+                self.fractal_values.append(1)
+            elif self.h4_data_fractal.loc[index, 'Fractal'] == 'fractal_low':
+                self.fractal_values.append(-1)
             else:
-                fractal_values.append(0)
+                self.fractal_values.append(0)
 
         # Plot the candlestick chart with the bar chart as an addplot
         addplot_bar = mpf.make_addplot(
-            fractal_values,
+            self.fractal_values,
             panel=1,
             secondary_y=False,
             color='b',
             alpha=0.5,
             width=0.5
         )
-        fig, axlist = mpf.plot(h4_data_fractal, type='candle', addplot=addplot_bar, ylabel='Price', tight_layout=True, returnfig=True)
+        fig, axlist = mpf.plot(self.h4_data_fractal, type='candle', addplot=addplot_bar, ylabel='Price', tight_layout=True, returnfig=True)
         mpf.show()
-        """
+        
 
     def update_H4_range(self, current_bar):
         if current_bar['High'] > self.H4_high:
             self.H4_high = current_bar['High']
             
-            if self.fractal_low < current_bar['Low']:
+            if self.H4_last_fractal_low < current_bar['Low']:
                 self.H4_low = self.H4_last_fractal_low
             else:
                 self.H4_low = current_bar['Low']
@@ -189,7 +189,7 @@ class HTF(Strategy):
         if current_bar['Low'] < self.H4_low:
             self.H4_low = current_bar['Low']
             
-            if self.fractal_high > current_bar['High']:
+            if self.H4_last_fractal_high > current_bar['High']:
                 self.H4_high = self.H4_last_fractal_high
             else:
                 self.H4_high = current_bar['High']
@@ -227,8 +227,17 @@ class HTF(Strategy):
         '''Buy function. Will place a long limit order'''
 
         Long_StopLoss = round(current_bar['Low'], 4) - self.Stop_Pips
-        Long_TakeProfit = current_bar['High'] + (3*(current_bar['High']-Long_StopLoss))
         Long_Size = round((self.equity * self.position_exposure) / (current_bar['High'] - Long_StopLoss))
+        Long_TakeProfit = round((current_bar['High'] + (3*(current_bar['High']-Long_StopLoss))),4)
+               
+        # print('buy - current bar', current_bar)
+        # print('sl', Long_StopLoss)
+        # print('tp',Long_TakeProfit)
+        # print('position size', Long_Size)
+        
+        if Long_TakeProfit >= self.H4_high:
+            print('TP out of range')
+            return
 
         order = self.buy(limit = current_bar['High'], sl= Long_StopLoss, tp = Long_TakeProfit, size = Long_Size)
         self.pending_orders.append(order)
@@ -242,15 +251,30 @@ class HTF(Strategy):
             'TP': [Long_TakeProfit], 
             'Size': [self.position_exposure], 
             'IsOpen': [True]})
+
+        
+        # print("new order", new_order)
         self.open_orders = pd.concat([self.open_orders, new_order], ignore_index=True)
 
     def SELL(self, current_bar, timestamp_utc):
         '''Sell function. Will place a short limit order'''
-       
-        Short_StopLoss = round(current_bar['High'], 4) + self.Stop_Pips
-        Short_TakeProfit = current_bar['Low'] - (3*(Short_StopLoss-current_bar['Low']))
-        Short_Size = round((self.equity * self.position_exposure) / ((Short_StopLoss - current_bar['Low'])*1000))
+        # print('sell - current bar', current_bar)
+        # print('equity',self.equity)
+        # print('pos exposure', self.position_exposure)
 
+        Short_StopLoss = round(current_bar['High'], 4) + self.Stop_Pips
+        Short_Size = round((self.equity * self.position_exposure) / ((Short_StopLoss - current_bar['Low'])))
+        Short_TakeProfit = round((current_bar['Low'] - (3*(Short_StopLoss-current_bar['Low']))),4)
+       
+        # print('sl', Short_StopLoss)
+        # print('position size', Short_Size)
+        # print('tp', Short_TakeProfit)
+        # print('4h low', self.H4_low)
+       
+        if Short_TakeProfit <= self.H4_low:
+            print('TP out of range')
+            return  
+        
         order = self.sell(limit = current_bar['Low'], sl= Short_StopLoss, tp = Short_TakeProfit, size = Short_Size)
         self.pending_orders.append(order)
 
@@ -263,6 +287,7 @@ class HTF(Strategy):
             'TP': [Short_TakeProfit], 
             'Size': [self.position_exposure], 
             'IsOpen': [True]})
+        # print("new order", new_order)
         self.open_orders = pd.concat([self.open_orders, new_order], ignore_index=True)
 
     def notify_order(self, order):
@@ -341,13 +366,20 @@ class HTF(Strategy):
                 elif order['Type'] == 'BUY' and current_bar['High'] < order['Limit'] and current_bar['Low'] < self.data.Low[-2] and current_index == (order['Datetime'] + pd.Timedelta(minutes=15)):
                     #continued long entry, cancel order and place new buy limit order
                     order_to_cancel = order.loc[index]
-                    order_to_cancel.cancel()
+                    print('orders before:', self.open_orders)
+                    order_to_cancel.cancel() #I DONT THINK THIS CANCEL IS WORKING 
+                    print('orders before:', self.open_orders)
+
                     self.BUY(current_bar, timestamp_utc)
                
                 elif order['Type'] == 'SELL' and current_bar['Low'] > order['Limit'] and current_bar['High'] > self.data.High[-2] and current_index == (order['Datetime'] + pd.Timedelta(minutes=15)):
                     #continued short entry, cancel order and place new sell limit order
                     order_to_cancel = order.loc[index]
-                    order_to_cancel.cancel()
+                    print('orders before:', self.open_orders)
+
+                    order_to_cancel.cancel() #I DONT THINK THIS CANCEL IS WORKING
+                    print('orders before:', self.open_orders)
+
                     self.SELL(current_bar, timestamp_utc)
                     
         self.close_pending_orders_after_fill()
@@ -507,4 +539,4 @@ bt = Backtest(min15_data, HTF, cash = 1_000)
 stats=bt.run()
 bt.plot()
 print(stats)
-# print(stats['_trades'].to_string())
+print(stats['_trades'].to_string())
