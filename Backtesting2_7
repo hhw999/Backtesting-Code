@@ -30,29 +30,6 @@ def identify_fractals(data):
         
         if is_high == True: return +1
         elif is_low == True: return -1
-        
-    # def is_regular_fractal(high, low, index):
-    #     if index < fractal_period or index >= len(high):
-    #         return False
-    #     fractal_high = high[index]
-    #     fractal_low = low[index]
-    #     is_high = fractal_high >= max(high[index - fractal_period:index + 1])
-    #     is_low = fractal_low <= min(low[index - fractal_period:index + 1])
-        
-    #     if is_high == True: return +1
-    #     elif is_low == True: return -1
-        
-    ## return is_high or is_low + 'regular fractal'
-    # for i in range(len(data)):
-    #     if is_bill_williams_fractal(data['High'], data['Low'], i) == +1 or \
-    #         is_regular_fractal(data['High'], data['Low'], i) == +1:
-    #         print('+1')
-    #         fractal_dates.append((data.index[i], 'fractal_high'))
-        
-    #     elif is_bill_williams_fractal(data['High'], data['Low'], i) == -1 or \
-    #         is_regular_fractal(data['High'], data['Low'], i) == -1:
-    #         print('-1')
-    #         fractal_dates.append((data.index[i], 'fractal_low'))
 
     # Return high or low fractal
     for i in range(len(data)):
@@ -64,26 +41,9 @@ def identify_fractals(data):
             print('-1')
             fractal_dates.append((data.index[i], 'fractal_low'))
 
-
     data['Fractal'] = ''
     for date, fractal_type in fractal_dates:
         data.loc[date, 'Fractal'] = fractal_type
-
-    # # Filter consecutive "fractal_low" and keep only the lowest low
-    # mask = data['Fractal'] == 'fractal_low'
-    # consecutive_groups = (mask != mask.shift()).cumsum()
-    # for group_id, group_data in data[mask].groupby(consecutive_groups):
-    #     lowest_low_index = group_data['Low'].idxmin()
-    #     data.loc[group_data.index, 'Fractal'] = ''
-    #     data.loc[lowest_low_index, 'Fractal'] = 'fractal_low'
-
-    # # Filter consecutive "fractal_high" and keep only the highest high
-    # mask = data['Fractal'] == 'fractal_high'
-    # consecutive_groups = (mask != mask.shift()).cumsum()
-    # for group_id, group_data in data[mask].groupby(consecutive_groups):
-    #     highest_high_index = group_data['High'].idxmax()
-    #     data.loc[group_data.index, 'Fractal'] = ''
-    #     data.loc[highest_high_index, 'Fractal'] = 'fractal_high'
 
     data = data.dropna(subset=['Open'])
     data.index = data.index.tz_localize(None)
@@ -166,63 +126,8 @@ class HTF(Strategy):
         self.pending_orders = []  # Track pending orders
         self.potential_orders = pd.DataFrame(columns=['Datetime', 'Type', 'Limit', 'SL', 'TP', 'Size', 'IsOpen'])
 
-        # print(self.h4_data_fractal)
-        #  plot of price and fractals line chart
-        # append fractals to data to fractal values for plot
-        # for index in self.h4_data_fractal.index:
-        #     if self.h4_data_fractal.loc[index, 'Fractal'] == 'fractal_high':
-        #         self.fractal_values.append(1)
-        #     elif self.h4_data_fractal.loc[index, 'Fractal'] == 'fractal_low':
-        #         self.fractal_values.append(-1)
-        #     else:
-        #         self.fractal_values.append(0)
-
-        # self.fractal_values = pd.DataFrame(index=self.min15_data_fractal.index)
-
-        # # Iterate through self.min15_data_fractal and append values to the DataFrame
-        # for index, row in self.min15_data_fractal.iterrows():
-        #     if row['Fractal'] == 'fractal_high':
-        #         self.fractal_values.loc[index, 'Fractal'] = 1
-        #     elif row['Fractal'] == 'fractal_low':
-        #         self.fractal_values.loc[index, 'Fractal'] = -1
-        #     else:
-        #         self.fractal_values.loc[index, 'Fractal'] = 0
-        # print(self.fractal_values.to_string())
-
-        # Plot the candlestick chart with the bar chart as an addplot
-        # addplot_bar = mpf.make_addplot(
-        #     self.fractal_values,
-        #     panel=1,
-        #     secondary_y=False,
-        #     color='b',
-        #     alpha=0.5,
-        #     width=0.5
-        # )
-        # fig, axlist = mpf.plot(self.min15_data_fractal, type='candle', addplot=addplot_bar, ylabel='Price', tight_layout=True, returnfig=True)
-        # mpf.show()
-
-        mpf.plot(h4_data, type = 'candle')
-    #     output_file('candlestick_plot.html')
-    #     TOOLS = "pan,wheel_zoom,box_zoom,reset,save,hover"
-
-    #     inc = h4_data.Close > h4_data.Open
-    #     dec = h4_data.Open > h4_data.Close
-    #     # w = 12*60*60*1000 # half day in ms
-    #     w = 5000000
-
-    #    # Create a Bokeh figure
-    #     p = figure(x_axis_label='Date', tools=TOOLS, width=1000, y_axis_label='Price', title='Candlestick Chart')
-
-    #     # Plot the candlestick segments
-    #     p.segment(x0=h4_data.index, x1=h4_data.index, y0=h4_data.High, y1=h4_data.Low, color="black")
-
-    #     # Plot the increasing (green) and decreasing (red) candlesticks
-    #     p.vbar(x=h4_data.index[inc], width=w, bottom=h4_data.Open[inc], top=h4_data.Close[inc], fill_color="#D5E1DD", line_color="black")
-    #     p.vbar(x=h4_data.index[dec], width=w, bottom=h4_data.Open[dec], top=h4_data.Close[dec], fill_color="#F2583E", line_color="black")
-
-    #     # Show the plot
-    #     show(p)
-
+        # mpf.plot(h4_data, type = 'candle')
+    
     def update_H4_range(self, current_bar):
         """Updates H4 range to define trading range"""
         if current_bar['High'] > self.H4_high:
