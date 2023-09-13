@@ -2,6 +2,7 @@ import pandas as pd
 import yfinance as yf
 import mplfinance as mpf
 import bokeh
+import matplotlib as plt
 from bokeh.plotting import figure, output_file
 from bokeh.io import output_notebook, show
 from bokeh.resources import INLINE
@@ -12,6 +13,9 @@ from pytz import UTC  # Import the UTC timezone from pytz library
 
 # Download the data (return = +2% in 6 total placed trades accross the 2x weeks between 8/8/23 to 19/8/23 when traded manually)
 min15_data = yf.download(tickers = 'GBPUSD=X' ,start="2023-8-6", end="2023-8-19", interval = '15m')
+
+
+H4_record = pd.DataFrame(columns=['Datetime','H4_high', 'H4_low'])
 
 def identify_fractals(data):
     """Identify fractals based off of code from Trading view"""
@@ -122,7 +126,6 @@ class HTF(Strategy):
         self.Limit_orders_not_met = pd.DataFrame(columns=['Datetime', 'Type', 'Limit', 'SL', 'TP', 'Size', 'IsOpen'])
         self.pending_orders = []  # Track pending orders
         self.potential_orders = pd.DataFrame(columns=['Datetime', 'Type', 'Limit', 'SL', 'TP', 'Size', 'IsOpen'])
-
         # mpf.plot(h4_data, type = 'candle')
     
     def update_H4_range(self, current_bar):
@@ -150,6 +153,10 @@ class HTF(Strategy):
             self.H4_equ = ((self.H4_high - self.H4_low) / 2) + self.H4_low
             self.upper_dead = 6 * ((self.H4_high - self.H4_low) / 10) + self.H4_low
             self.lower_dead = 4 * ((self.H4_high - self.H4_low) / 10) + self.H4_low
+
+        new_data = pd.DataFrame({'Datetime': [self.data.index[-1]], 'H4_high': self.H4_high, 'H4_low': self.H4_low})
+        global H4_record
+        H4_record = pd.concat([H4_record, new_data], ignore_index=True)
 
     def determine_directional_bias(self):
         if self.H4_high > 0 and self.H4_low > 0:
@@ -276,34 +283,6 @@ class HTF(Strategy):
         
         self.pending_orders.clear()
 
-    # def close_order(self, check_limit):
-    #     """Close specific orders"""
-
-    #     orders_to_remove = []  # Create a list to store orders to remove
-    #     order_to_cancel = None
-    #     for backtesting_order in self.orders:
-    #         # itterates through each order waiting in the backtesting.py order book
-    #         print('self.pending orders', self.pending_orders)
-    #         print('self order', self.orders)
-    #         print('backtesting orders', backtesting_order)
-    #         print('check limit', check_limit)
-    #         print('backtesting order .limit', backtesting_order.limit)
-
-    #         if check_limit == backtesting_order.limit:
-    #             print('limit match')
-    #             order_to_cancel = backtesting_order
-    #             print('order to cancel', order_to_cancel)
-    #             break
-
-    #     if order_to_cancel:
-    #         print('order to cancel', order_to_cancel)
-    #         order_to_cancel.cancel()
-    #         orders_to_remove.append(backtesting_order)  # Add canceled orders to the list
-
-    #     # Remove canceled orders from self.pending_orders
-    #     for order in orders_to_remove:
-    #         self.pending_orders.remove(order)
-
     def close_order(self, check_SL):
         """Close specific orders"""
 
@@ -319,7 +298,8 @@ class HTF(Strategy):
 
             if check_SL == backtesting_order.stop:
                 order_to_cancel = backtesting_order
-                break
+                return
+                
 
         if order_to_cancel:
             orders_to_remove.append(backtesting_order)  # Add canceled orders to the list
@@ -328,7 +308,8 @@ class HTF(Strategy):
 
         # Remove canceled orders from self.pending_orders
         for order in orders_to_remove:
-            self.pending_orders.remove(order)
+            if order in self.pending_orders:
+                self.pending_orders.remove(order)
 
     def check_dead_zone(self, Entry_Price):
         """Check if current entry price is within Kill zone. Return True if entry price is not in Dead Zone (+-10% around EQU.)"""
@@ -367,17 +348,18 @@ class HTF(Strategy):
                 if order['Type'] == 'BUY' and current_bar['High'] >= order['Limit']:
                     # if a Buy order is filled in the current bar
                     self.open_orders.at[index, 'IsOpen'] = False
+                    print('BUY Order filled', order)
                 
                 elif order['Type'] == 'SELL' and current_bar['Low'] <= order['Limit']:
                     # if a sell order is filled in the current bar
                     self.open_orders.at[index, 'IsOpen'] = False
+                    print('SELL Order filled', order)
 
                 elif order['Type'] == 'BUY' and current_bar['Low'] < order['TP']:
                     # cancel open buy order if not tagged in and price breaks SL level
                     print('order to cancel, not tagged in', self.orders)
                     self.close_order(order['SL'])
                     self.open_orders.at[index, 'IsOpen'] = False
-
                     print('orders after:', self.orders)
 
                 elif order['Type'] == 'SELL' and current_bar['Low'] <= order['Limit']:
@@ -385,7 +367,6 @@ class HTF(Strategy):
                     print('order to cancel, not tagged in', self.orders)
                     self.close_order(order['SL'])
                     self.open_orders.at[index, 'IsOpen'] = False
-
                     print('orders after:', self.orders)
                 
                 elif order['Type'] == 'BUY' and current_bar['High'] < order['Limit'] and \
@@ -398,10 +379,9 @@ class HTF(Strategy):
                     print('orders before:', self.open_orders)
                     self.close_order(order['SL'])
                     self.open_orders.at[index, 'IsOpen'] = False
-
+                    self.BUY(current_bar, timestamp_utc)
                     print('orders after:', self.open_orders)
 
-                    self.BUY(current_bar, timestamp_utc)
                
                 elif order['Type'] == 'SELL' and current_bar['Low'] > order['Limit'] and \
                     current_bar['High'] > self.data.High[-2] and \
@@ -413,10 +393,9 @@ class HTF(Strategy):
                     print('orders before:', self.open_orders)
                     self.close_order(order['SL'])
                     self.open_orders.at[index, 'IsOpen'] = False
-
+                    self.SELL(current_bar, timestamp_utc)
                     print('orders after:', self.open_orders)
 
-                    self.SELL(current_bar, timestamp_utc)
 
         self.close_pending_orders_after_fill()
     
@@ -433,8 +412,10 @@ class HTF(Strategy):
                 
                 if self.check_sweep_origin(self.min15_data_fractal, current_index):                 #Check if liquidity sweep began within KZ
                     if current_bar['Low'] > self.H4_equ and self.directional_bias != 0 and self.check_dead_zone(current_bar['Low']):       # FT/NFT
+                        print('FT/NFT sell sweep', current_index)
                         self.SELL(current_bar, timestamp_utc)
                     elif self.directional_bias == -2 and self.check_dead_zone(current_bar['Low']):       # IF SFT to the down side
+                        print('SFT sell sweep', current_index)
                         self.SELL(current_bar, timestamp_utc)
                     else: 
                         # add to potential order list. If continued entry point drops below equ then enter 
@@ -458,8 +439,11 @@ class HTF(Strategy):
                 if self.check_sweep_origin(self.min15_data_fractal, current_index):                 #Check if liquidity sweep began within KZ
                     if current_bar['High'] < self.H4_equ and self.directional_bias != 0 and self.check_dead_zone(current_bar['High']):       # FT/NFT
                         self.BUY(current_bar, timestamp_utc)
+                        print('FT/NFT BUY sweep', current_index)
                     elif self.directional_bias == 2 and self.check_dead_zone(current_bar['High']):       # SFT to the up side
                         self.BUY(current_bar, timestamp_utc)
+                        print('SFT BUY sweep', current_index)
+
                     else:
                         # add to potential order list. If continued entry point drops below equ then enter 
                         new_order = pd.DataFrame({
@@ -574,4 +558,26 @@ bt = Backtest(min15_data, HTF, cash = 1_000)
 stats=bt.run()
 bt.plot()
 print(stats)
-print(stats['_trades'].to_string())
+# print(stats['_trades'].to_string())
+
+# Assuming you already have H4_record DataFrame
+# Make sure the 'Datetime' column is in datetime format
+H4_record['Datetime'] = pd.to_datetime(H4_record['Datetime'])
+
+# Create a figure and axis
+fig, ax = plt.subplots(figsize=(12, 6))
+
+# Plot H4_high and H4_low against Datetime
+ax.plot(H4_record['Datetime'], H4_record['H4_high'], label='H4_high', color='blue')
+ax.plot(H4_record['Datetime'], H4_record['H4_low'], label='H4_low', color='red')
+
+# Set labels and title
+ax.set_xlabel('Date')
+ax.set_ylabel('Price')
+ax.set_title('H4 High and Low Over Time')
+
+# Add a legend
+ax.legend()
+
+# Show the plot
+plt.show()
