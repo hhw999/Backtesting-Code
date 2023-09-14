@@ -2,7 +2,9 @@ import pandas as pd
 import yfinance as yf
 import mplfinance as mpf
 import bokeh
-import matplotlib as plt
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Cursor
+import matplotlib.dates as mdates
 from bokeh.plotting import figure, output_file
 from bokeh.io import output_notebook, show
 from bokeh.resources import INLINE
@@ -16,6 +18,9 @@ min15_data = yf.download(tickers = 'GBPUSD=X' ,start="2023-8-6", end="2023-8-19"
 
 
 H4_record = pd.DataFrame(columns=['Datetime','H4_high', 'H4_low'])
+min15_record = pd.DataFrame(columns=['Datetime','M15_high', 'M15_low'])
+global_record = pd.DataFrame.empty
+
 
 def identify_fractals(data):
     """Identify fractals based off of code from Trading view"""
@@ -118,6 +123,10 @@ class HTF(Strategy):
         self.h4_data_fractal_1 = identify_fractals(h4_data)
         self.min15_data_fractal_1 = identify_fractals(min15_data)
 
+        global global_record
+        global_record = pd.merge(global_record, self.h4_data_fractal_1, on='Datetime', how='left')
+        global_record = pd.merge(global_record, self.min15_data_fractal_1, on='Datetime', how='left')
+
         # Identify candles as Bullish or Bearish
         self.h4_data_fractal = identify_bar(self.h4_data_fractal_1)
         self.min15_data_fractal = identify_bar(self.min15_data_fractal_1)
@@ -209,7 +218,7 @@ class HTF(Strategy):
             'Limit': [round(current_bar['High'], 4)], 
             'SL': [Long_StopLoss],
             'TP': [Long_TakeProfit], 
-            'Size': [self.position_exposure], 
+            'Size': 100, 
             'IsOpen': [True]})
         
         # print("new order", new_order)
@@ -245,7 +254,7 @@ class HTF(Strategy):
             'Limit': [round(current_bar['Low'],4)], 
             'SL': [Short_StopLoss],
             'TP': [Short_TakeProfit], 
-            'Size': [self.position_exposure], 
+            'Size': -100, 
             'IsOpen': [True]})
         # print("new order", new_order)
         self.open_orders = pd.concat([self.open_orders, new_order], ignore_index=True)
@@ -335,7 +344,8 @@ class HTF(Strategy):
             return False  
         else: return True                                      # The origin of the sweep is within the kill zone
 
-    def next(self):        
+    def next(self):  
+        global min15_record      
         current_index = self.data.index[-1]  
         current_bar = self.min15_data_fractal.loc[current_index]
         timestamp_utc = current_index.tz_localize(UTC)              # Convert the timestamp to UTC timezone
@@ -344,16 +354,16 @@ class HTF(Strategy):
         # Fill open limit orders or extend entry 
         for index, order in self.open_orders.iterrows():
             if order['IsOpen']:
-                print('main loop Order IsOpen:', order)
+                print('main loop Order IsOpen:', current_index)
                 if order['Type'] == 'BUY' and current_bar['High'] >= order['Limit']:
                     # if a Buy order is filled in the current bar
                     self.open_orders.at[index, 'IsOpen'] = False
-                    print('BUY Order filled', order)
+                    print('BUY Order filled', current_index, order)
                 
                 elif order['Type'] == 'SELL' and current_bar['Low'] <= order['Limit']:
                     # if a sell order is filled in the current bar
                     self.open_orders.at[index, 'IsOpen'] = False
-                    print('SELL Order filled', order)
+                    print('SELL Order filled', current_index, order)
 
                 elif order['Type'] == 'BUY' and current_bar['Low'] < order['TP']:
                     # cancel open buy order if not tagged in and price breaks SL level
@@ -395,7 +405,6 @@ class HTF(Strategy):
                     self.open_orders.at[index, 'IsOpen'] = False
                     self.SELL(current_bar, timestamp_utc)
                     print('orders after:', self.open_orders)
-
 
         self.close_pending_orders_after_fill()
     
@@ -510,14 +519,10 @@ class HTF(Strategy):
             # Update 4H range
             if self.H4_last_fractal_high == 0 or self.H4_last_fractal_low == 0:
                 # Initial update 4H last fractals
-                if H4_data_bar['Fractal'] == "fractal_high":
-                    self.H4_last_fractal_high = current_bar['High']
-                    self.H4_last_fractal_low = current_bar['Low']
-                    self.H4_fractal_high_validity = 1
-                if H4_data_bar['Fractal'] == "fractal_low":
-                    self.H4_last_fractal_low = current_bar['Low']
-                    self.H4_last_fractal_high = current_bar['Low'] 
-                    self.H4_fractal_low_validity = 1 
+                self.H4_last_fractal_high = current_bar['High']
+                self.H4_last_fractal_low = current_bar['Low']
+                self.H4_fractal_high_validity = 1
+
             
             self.update_H4_range(H4_data_bar)
             self.determine_directional_bias()       
@@ -529,7 +534,7 @@ class HTF(Strategy):
             if H4_data_bar['Fractal'] == "fractal_low":
                 self.H4_last_fractal_low = current_bar['Low'] 
                 self.H4_fractal_low_validity = 1 
-
+            
         # set last 15 min fractal levels
         if current_bar['Fractal'] == "fractal_high":
             self.fractal_high = current_bar['High']
@@ -542,10 +547,14 @@ class HTF(Strategy):
         if current_bar['High'] > self.Min15_high:
             self.Min15_high = current_bar['High']
             self.Min15_low = self.fractal_low 
+            new_data = pd.DataFrame({'Datetime': [self.data.index[-1]], 'M15_high': self.Min15_high, 'M15_low': self.Min15_low})
+            min15_record = pd.concat([min15_record, new_data], ignore_index=True)
 
         if current_bar['Low'] <  self.Min15_low:
             self.Min15_low = current_bar['Low']
             self.Min15_high = self.fractal_high
+            new_data = pd.DataFrame({'Datetime': [self.data.index[-1]], 'M15_high': self.Min15_high, 'M15_low': self.Min15_low})
+            min15_record = pd.concat([min15_record, new_data], ignore_index=True)
 
         # update fractal validity
         if current_bar['High'] > self.fractal_high:
@@ -560,24 +569,10 @@ bt.plot()
 print(stats)
 # print(stats['_trades'].to_string())
 
-# Assuming you already have H4_record DataFrame
-# Make sure the 'Datetime' column is in datetime format
 H4_record['Datetime'] = pd.to_datetime(H4_record['Datetime'])
+min15_record['Datetime'] = pd.to_datetime(min15_record['Datetime'])
 
-# Create a figure and axis
-fig, ax = plt.subplots(figsize=(12, 6))
+pd.merge(global_record, H4_record, on='Datetime', how='left')
+pd.merge(global_record, min15_record, on='Datetime', how='left')
 
-# Plot H4_high and H4_low against Datetime
-ax.plot(H4_record['Datetime'], H4_record['H4_high'], label='H4_high', color='blue')
-ax.plot(H4_record['Datetime'], H4_record['H4_low'], label='H4_low', color='red')
-
-# Set labels and title
-ax.set_xlabel('Date')
-ax.set_ylabel('Price')
-ax.set_title('H4 High and Low Over Time')
-
-# Add a legend
-ax.legend()
-
-# Show the plot
-plt.show()
+global_record.to_csv('global_record.csv')
