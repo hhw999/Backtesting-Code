@@ -1,0 +1,12 @@
+import pandas as pd
+
+
+df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
+df['timestamp'] = pd.to_datetime(df["timestamp"], unit = "ms")
+
+start = '2023-04-01'
+end = '2023-06-30'
+
+
+# output = df[(df['timestamp'])]
+print(df)

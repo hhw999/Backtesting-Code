@@ -1,0 +1,10 @@
+import pandas as pd
+
+df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
+df['timestamp'] = pd.to_datetime(df["timestamp"], unit = "ms")
+df = df.sort_values("timestamp")
+
+df['diff'] = df.timestamp.diff()
+df.sort_values("diff")
+
+print(df)

@@ -18,6 +18,7 @@ min15_data = yf.download(tickers = 'GBPUSD=X' ,start="2023-8-6", end="2023-8-19"
 
 
 H4_record = pd.DataFrame(columns=['Datetime','H4_high', 'H4_low'])
+H4_LastFractals = pd.DataFrame(columns = ['Datetime', 'LastFractalHigh', 'LastFractalLow'])
 min15_record = pd.DataFrame(columns=['Datetime','M15_high', 'M15_low'])
 global_record = pd.DataFrame.empty
 
@@ -87,13 +88,13 @@ def identify_bar(data):
 
 class HTF(Strategy): 
     position_exposure = 0.01                            #1% of available cash position
-    Stop_Pips = 0.0002                                  #2 pip extra on SL
+    Stop_Pips = 0.0003                                  #3 pip extra on SL for GBPUSD, 2 for EURUSD
     
     #key levels
-    H4_high = 0                                             
-    H4_low = 0
-    H4_last_fractal_high = 0
-    H4_last_fractal_low = 0
+    H4_high = 1.28050                                             
+    H4_low = 1.26201
+    H4_last_fractal_high = 1.27921
+    H4_last_fractal_low = 1.26850
 
     fractal_high = 0
     fractal_low = 0
@@ -123,19 +124,28 @@ class HTF(Strategy):
         self.h4_data_fractal_1 = identify_fractals(h4_data)
         self.min15_data_fractal_1 = identify_fractals(min15_data)
 
-        global global_record
-        global_record = pd.merge(global_record, self.h4_data_fractal_1, on='Datetime', how='left')
-        global_record = pd.merge(global_record, self.min15_data_fractal_1, on='Datetime', how='left')
+        # global global_record
+        # global_record = pd.merge(global_record, self.h4_data_fractal_1, on='Datetime', how='left')
+        # global_record = pd.merge(global_record, self.min15_data_fractal_1, on='Datetime', how='left')
 
         # Identify candles as Bullish or Bearish
         self.h4_data_fractal = identify_bar(self.h4_data_fractal_1)
         self.min15_data_fractal = identify_bar(self.min15_data_fractal_1)
+
+        self.h4_data_fractal_1.to_csv('H4-fractals.csv')
+        self.min15_data_fractal_1.to_csv('min15-fractals.csv')
+
 
         self.open_orders = pd.DataFrame(columns=['Datetime', 'Type', 'Limit', 'SL', 'TP', 'Size', 'IsOpen'])
         self.Limit_orders_not_met = pd.DataFrame(columns=['Datetime', 'Type', 'Limit', 'SL', 'TP', 'Size', 'IsOpen'])
         self.pending_orders = []  # Track pending orders
         self.potential_orders = pd.DataFrame(columns=['Datetime', 'Type', 'Limit', 'SL', 'TP', 'Size', 'IsOpen'])
         # mpf.plot(h4_data, type = 'candle')
+        
+
+        self.H4_equ = ((self.H4_high - self.H4_low) / 2) + self.H4_low
+        self.upper_dead = 6 * ((self.H4_high - self.H4_low) / 10) + self.H4_low
+        self.lower_dead = 4 * ((self.H4_high - self.H4_low) / 10) + self.H4_low
     
     def update_H4_range(self, current_bar):
         """Updates H4 range to define trading range"""
@@ -205,7 +215,17 @@ class HTF(Strategy):
         # print('tp',Long_TakeProfit)
         
         if Long_TakeProfit >= self.H4_high:
-            print('LONG TP out of range')
+            print('LONG TP out of range', timestamp_utc)
+            new_order = pd.DataFrame({
+                'Datetime': [timestamp_utc],
+                'Type': ['BUY'], 
+                'Limit': [current_bar['High']], 
+                'SL': [0],
+                'TP': [0], 
+                'Size': [self.position_exposure], 
+                'IsOpen': [True],
+                'Bar': [current_bar['Bar']] })
+            self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
             return
 
         order = self.buy(limit = round(current_bar['High'], 4), sl= Long_StopLoss, tp = Long_TakeProfit, size = 100)
@@ -241,7 +261,19 @@ class HTF(Strategy):
         # print('4h low', self.H4_low)
        
         if Short_TakeProfit <= self.H4_low:
-            print('SHORT TP out of range')
+            print('SHORT TP out of range', timestamp_utc)
+
+            new_order = pd.DataFrame({
+                'Datetime': [timestamp_utc],
+                'Type': ['SELL'], 
+                'Limit': [current_bar['Low']], 
+                'SL': [0],
+                'TP': [0], 
+                'Size': [self.position_exposure], 
+                'IsOpen': [True],
+                'Bar': [current_bar['Bar']] })
+            self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
+
             return  
         
         order = self.sell(limit = round(current_bar['Low'], 4), sl= Short_StopLoss, tp = Short_TakeProfit, size = 100)
@@ -300,12 +332,11 @@ class HTF(Strategy):
         for backtesting_order in self.orders:
             # itterates through each order waiting in the backtesting.py order book
             print('self.pending orders', self.pending_orders)
-            print('self order', self.orders)
+            print('self.orders', self.orders)
             print('backtesting orders', backtesting_order)
             print('check limit', check_SL)
-            print('backtesting order .stop', backtesting_order.stop)
 
-            if check_SL == backtesting_order.stop:
+            if check_SL == backtesting_order.sl: 
                 order_to_cancel = backtesting_order
                 return
                 
@@ -354,7 +385,9 @@ class HTF(Strategy):
         # Fill open limit orders or extend entry 
         for index, order in self.open_orders.iterrows():
             if order['IsOpen']:
+                
                 print('main loop Order IsOpen:', current_index)
+
                 if order['Type'] == 'BUY' and current_bar['High'] >= order['Limit']:
                     # if a Buy order is filled in the current bar
                     self.open_orders.at[index, 'IsOpen'] = False
@@ -365,14 +398,14 @@ class HTF(Strategy):
                     self.open_orders.at[index, 'IsOpen'] = False
                     print('SELL Order filled', current_index, order)
 
-                elif order['Type'] == 'BUY' and current_bar['Low'] < order['TP']:
+                elif order['Type'] == 'BUY' and current_bar['Low'] < order['sl']:
                     # cancel open buy order if not tagged in and price breaks SL level
                     print('order to cancel, not tagged in', self.orders)
                     self.close_order(order['SL'])
                     self.open_orders.at[index, 'IsOpen'] = False
                     print('orders after:', self.orders)
 
-                elif order['Type'] == 'SELL' and current_bar['Low'] <= order['Limit']:
+                elif order['Type'] == 'SELL' and current_bar['High'] > order['sl']:
                     # cancel open sell order if not tagged in and price breaks SL level
                     print('order to cancel, not tagged in', self.orders)
                     self.close_order(order['SL'])
@@ -391,20 +424,20 @@ class HTF(Strategy):
                     self.open_orders.at[index, 'IsOpen'] = False
                     self.BUY(current_bar, timestamp_utc)
                     print('orders after:', self.open_orders)
-
                
                 elif order['Type'] == 'SELL' and current_bar['Low'] > order['Limit'] and \
                     current_bar['High'] > self.data.High[-2] and \
                     current_index == (order['Datetime'] + pd.Timedelta(minutes=15)) and \
                     current_bar['High'] < self.H4_high and current_bar['Low'] > self.H4_low:
                     # continued short entry, cancel order and place new sell limit order
-                   
+            
                     print('order to cancel, continued short entry', self.orders)
                     print('orders before:', self.open_orders)
                     self.close_order(order['SL'])
                     self.open_orders.at[index, 'IsOpen'] = False
                     self.SELL(current_bar, timestamp_utc)
                     print('orders after:', self.open_orders)
+                    return
 
         self.close_pending_orders_after_fill()
     
@@ -422,21 +455,32 @@ class HTF(Strategy):
                 if self.check_sweep_origin(self.min15_data_fractal, current_index):                 #Check if liquidity sweep began within KZ
                     if current_bar['Low'] > self.H4_equ and self.directional_bias != 0 and self.check_dead_zone(current_bar['Low']):       # FT/NFT
                         print('FT/NFT sell sweep', current_index)
+                        print("current bar:", current_bar)
+                        print('15 min high and low:', self.Min15_high, self.Min15_low)
+                        print('Fractal high and low:', self.fractal_high, self.fractal_low)
                         self.SELL(current_bar, timestamp_utc)
                     elif self.directional_bias == -2 and self.check_dead_zone(current_bar['Low']):       # IF SFT to the down side
                         print('SFT sell sweep', current_index)
+                        print("current bar:", current_bar)
+                        print('15 min high and low:', self.Min15_high, self.Min15_low)
+                        print('Fractal high and low:', self.fractal_high, self.fractal_low)
                         self.SELL(current_bar, timestamp_utc)
                     else: 
                         # add to potential order list. If continued entry point drops below equ then enter 
+                        print('Potential order created', current_index)
+                        print("current bar:", current_bar)
+                        print('15 min high and low:', self.Min15_high, self.Min15_low)
+                        print('Fractal high and low:', self.fractal_high, self.fractal_low)
+                        print('EQ:', self.H4_equ)
                         new_order = pd.DataFrame({
-                            'Datetime': [timestamp_utc],
-                            'Type': ['SELL'], 
-                            'Limit': [current_bar['Low']], 
-                            'SL': [0],
-                            'TP': [0], 
-                            'Size': [self.position_exposure], 
-                            'IsOpen': [True],
-                            'Bar': [current_bar['Bar']] })
+                                'Datetime': [timestamp_utc],
+                                'Type': ['SELL'], 
+                                'Limit': [current_bar['Low']], 
+                                'SL': [0],
+                                'TP': [0], 
+                                'Size': [self.position_exposure], 
+                                'IsOpen': [True],
+                                'Bar': [current_bar['Bar']] })
                         self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
 
             # Sweep Buy side liquidity or Sweep Buy side 15Min range liquidity
@@ -449,12 +493,23 @@ class HTF(Strategy):
                     if current_bar['High'] < self.H4_equ and self.directional_bias != 0 and self.check_dead_zone(current_bar['High']):       # FT/NFT
                         self.BUY(current_bar, timestamp_utc)
                         print('FT/NFT BUY sweep', current_index)
+                        print("current bar:", current_bar)
+                        print('15 min high and low:', self.Min15_high, self.Min15_low)
+                        print('Fractal high and low:', self.fractal_high, self.fractal_low)
                     elif self.directional_bias == 2 and self.check_dead_zone(current_bar['High']):       # SFT to the up side
                         self.BUY(current_bar, timestamp_utc)
                         print('SFT BUY sweep', current_index)
+                        print("current bar:", current_bar)
+                        print('15 min high and low:', self.Min15_high, self.Min15_low)
+                        print('Fractal high and low:', self.fractal_high, self.fractal_low)
 
                     else:
                         # add to potential order list. If continued entry point drops below equ then enter 
+                        print('Potential order created', current_index)
+                        print("current bar:", current_bar)
+                        print('15 min high and low:', self.Min15_high, self.Min15_low)
+                        print('Fractal high and low:', self.fractal_high, self.fractal_low)
+                        print('EQ:', self.H4_equ)
                         new_order = pd.DataFrame({
                             'Datetime': [timestamp_utc],
                             'Type': ['BUY'], 
@@ -466,12 +521,18 @@ class HTF(Strategy):
                             'Bar': [current_bar['Bar']] })
                         self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
             
-            # Delayed entry. If a liquidity sweep was originally invalid but continued until entry is below/above equ
+            # Delayed entries
             elif not self.potential_orders.empty:
                 rows_to_delete = []
                 for index, order in self.potential_orders.iterrows():
-                    if order['Type'] == 'BUY' and current_bar['High'] < self.H4_equ and order['Bar'] == current_bar['Bar']: 
+                    if order['Type'] == 'BUY' and  current_bar['Low'] < (order['SL']+ self.Stop_Pips) and current_bar['High'] < self.H4_equ and order['Bar'] == current_bar['Bar']: 
+                        # Delayed entry. If a liquidity sweep was originally invalid but continued until entry is below equ
+
                         self.BUY(current_bar, timestamp_utc)
+                        print('delayed entry from potential order', current_index)
+                        print("current bar:", current_bar)
+                        print('15 min high and low:', self.Min15_high, self.Min15_low)
+                        print('Fractal high and low:', self.fractal_high, self.fractal_low)
                     
                     elif order['Type'] == 'BUY' and current_bar['High'] >= self.H4_equ and order['Bar'] == current_bar['Bar']: 
                         # drop the last potential order bar
@@ -488,8 +549,14 @@ class HTF(Strategy):
                             'Bar': [current_bar['Bar']] })
                         self.potential_orders = pd.concat([self.potential_orders, new_order], ignore_index=True)
                     
-                    elif order['Type'] == 'SELL' and current_bar['Low'] > self.H4_equ and order['Bar'] == current_bar['Bar']: 
+                    elif order['Type'] == 'SELL' and  current_bar['High'] > (order['SL'] - self.Stop_Pips) and current_bar['Low'] > self.H4_equ and order['Bar'] == current_bar['Bar']: 
+                        # Delayed entry. If a liquidity sweep was originally invalid but continued until entry is above equ
+
                         self.SELL(current_bar, timestamp_utc)
+                        print('delayed entry from potential order', current_index)
+                        print("current bar:", current_bar)
+                        print('15 min high and low:', self.Min15_high, self.Min15_low)
+                        print('Fractal high and low:', self.fractal_high, self.fractal_low)
                     
                     elif order['Type'] == 'SELL' and current_bar['High'] <= self.H4_equ and order['Bar'] == current_bar['Bar']: 
                         # Drop the last potential order bar
@@ -523,17 +590,23 @@ class HTF(Strategy):
                 self.H4_last_fractal_low = current_bar['Low']
                 self.H4_fractal_high_validity = 1
 
-            
             self.update_H4_range(H4_data_bar)
             self.determine_directional_bias()       
 
             # Update 4H last fractals
             if H4_data_bar['Fractal'] == "fractal_high":
-                self.H4_last_fractal_high = current_bar['High']
+                self.H4_last_fractal_high = self.h4_data_fractal.loc[current_index, 'High']
                 self.H4_fractal_high_validity = 1
+                new_data = pd.DataFrame({'Datetime': [self.data.index[-1]], 'LastFractalHigh': self.H4_last_fractal_high, 'LastFractalLow': self.H4_last_fractal_low})
+                global H4_LastFractals
+                H4_LastFractals = pd.concat([H4_LastFractals, new_data], ignore_index=True)
+
+
             if H4_data_bar['Fractal'] == "fractal_low":
-                self.H4_last_fractal_low = current_bar['Low'] 
+                self.H4_last_fractal_low = self.h4_data_fractal.loc[current_index, 'Low'] 
                 self.H4_fractal_low_validity = 1 
+                new_data = pd.DataFrame({'Datetime': [self.data.index[-1]], 'LastFractalHigh': self.H4_last_fractal_high, 'LastFractalLow': self.H4_last_fractal_low})
+                H4_LastFractals = pd.concat([H4_LastFractals, new_data], ignore_index=True)
             
         # set last 15 min fractal levels
         if current_bar['Fractal'] == "fractal_high":
@@ -549,12 +622,26 @@ class HTF(Strategy):
             self.Min15_low = self.fractal_low 
             new_data = pd.DataFrame({'Datetime': [self.data.index[-1]], 'M15_high': self.Min15_high, 'M15_low': self.Min15_low})
             min15_record = pd.concat([min15_record, new_data], ignore_index=True)
+            
+            for index, order in self.open_orders.iterrows():
+                if order['IsOpen']:
+                    print('order to cancel, not tagged in', self.orders)
+                    self.close_order(order['SL'])
+                    self.open_orders.at[index, 'IsOpen'] = False
 
         if current_bar['Low'] <  self.Min15_low:
             self.Min15_low = current_bar['Low']
             self.Min15_high = self.fractal_high
             new_data = pd.DataFrame({'Datetime': [self.data.index[-1]], 'M15_high': self.Min15_high, 'M15_low': self.Min15_low})
             min15_record = pd.concat([min15_record, new_data], ignore_index=True)
+
+            for index, order in self.open_orders.iterrows():
+                if order['IsOpen']:
+                    print('order to cancel, not tagged in', self.orders)
+                    self.close_order(order['SL'])
+                    self.open_orders.at[index, 'IsOpen'] = False
+
+        self.close_pending_orders_after_fill()
 
         # update fractal validity
         if current_bar['High'] > self.fractal_high:
@@ -571,8 +658,12 @@ print(stats)
 
 H4_record['Datetime'] = pd.to_datetime(H4_record['Datetime'])
 min15_record['Datetime'] = pd.to_datetime(min15_record['Datetime'])
+H4_LastFractals['Datetime'] = pd.to_datetime(H4_LastFractals['Datetime'])
 
-pd.merge(global_record, H4_record, on='Datetime', how='left')
-pd.merge(global_record, min15_record, on='Datetime', how='left')
 
-global_record.to_csv('global_record.csv')
+# pd.merge(global_record, H4_record, on='Datetime', how='left')
+# pd.merge(global_record, min15_record, on='Datetime', how='left')
+
+H4_record.to_csv('H4_levels.csv')
+min15_record.to_csv('min15_levels.csv')
+H4_LastFractals.to_csv('H4LastFractals.csv')
