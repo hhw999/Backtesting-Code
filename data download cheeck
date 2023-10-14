@@ -1,10 +1,9 @@
 import pandas as pd
 
-df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
+df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/usdchf-m15-bid-2020-09-16-2023-09-16.csv")
 df['timestamp'] = pd.to_datetime(df["timestamp"], unit = "ms")
 df = df.sort_values("timestamp")
+df = df[df['volume'] != 0]
 
-df['diff'] = df.timestamp.diff()
-df.sort_values("diff")
-
-print(df)
+print('Done')
+df.to_csv('usdchf-m15-bid-2020-09-16-2023-09-16_TS.csv')

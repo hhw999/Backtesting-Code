@@ -60,27 +60,32 @@ def identify_fractals(data):
     return data
 
 def determine_directional_bias(data):
-    global H4_high, H4_low, directional_bias, H4_high_from_fractal, H4_low_from_fractal, h4_data  # Declare these variables as global
+    global H4_high, H4_low, directional_bias, H4_high_from_fractal, H4_low_from_fractal, h4_data_fractal  # Declare these variables as global
 
     if H4_high > 0 and H4_low > 0:
         previous_h4_high = H4_high
         previous_h4_low = H4_low
 
-        # Helper function to fetch the next bars using relative indexing
-        def get_next_bar(current_pos, steps):
-            next_pos = current_pos + steps
-            while next_pos < len(h4_data) and h4_data.iloc[next_pos].isna().all():
+        # Helper function to fetch the next available bar with data using relative indexing
+        def get_next_bar_with_data(current_pos):
+            next_pos = current_pos + 1  # Start with the very next position
+            while next_pos < len(h4_data_fractal) and h4_data_fractal.iloc[next_pos].isna().all():  # Keep iterating if the row has all NaN values
                 next_pos += 1
-            if next_pos < len(h4_data):
-                return h4_data.iloc[next_pos]
+            if next_pos < len(h4_data_fractal):  # If we're still within the DataFrame bounds
+                return h4_data_fractal.iloc[next_pos]
             else:
-                print(f"No data available for position: {next_pos}")
+                print(f"No data available after position: {current_pos}")
                 return None
 
-        current_pos = h4_data.index.get_loc(data.name)
+        current_pos = h4_data_fractal.index.get_loc(data.name)
         
-        next_h4_bar = get_next_bar(current_pos, 1)  # Get next bar (4 hours later)
-        next_h4_bar2 = get_next_bar(current_pos, 2)  # Get bar after next (8 hours later)
+        next_h4_bar = get_next_bar_with_data(current_pos)  # Get the next available bar with data
+        if next_h4_bar is not None:
+            # If the next_h4_bar was found, try to find the bar after that
+            next_pos_for_bar2 = h4_data_fractal.index.get_loc(next_h4_bar.name)
+            next_h4_bar2 = get_next_bar_with_data(next_pos_for_bar2)  
+        else:
+            next_h4_bar2 = None
 
         if data['High'] >= previous_h4_high and H4_high_from_fractal: 
             ### Interaction with upper H4 Level
@@ -95,8 +100,6 @@ def determine_directional_bias(data):
                 if next_h4_bar['Close'] >= previous_h4_high or next_h4_bar2['Close'] >= previous_h4_high:
                     # bar2/bar3 body close
                     directional_bias = 1 # Set directional bias FT to the up side
-                    print("bar2", next_h4_bar)
-                    print("bar3", next_h4_bar2)
             
             elif data['Close'] > previous_h4_high and next_h4_bar['Close'] <= previous_h4_high:
                 # body close with bar2 closing below level
@@ -141,6 +144,8 @@ def determine_directional_bias(data):
                 print(data)
                 print('preivous H4 Low', previous_h4_low)
                 print('Next Bar', next_h4_bar)
+                print('Next Bar2', next_h4_bar2)
+                print(h4_data_fractal[data.name-4:data.name+4])
         
         elif data['High'] >= previous_h4_high and H4_high_from_fractal == False: pass 
         elif data['Low'] <= previous_h4_low and H4_low_from_fractal == False: pass
@@ -357,6 +362,9 @@ def process_results(df, daily_momentum_data):
     # Drop consecutive duplicates based on H4_high and H4_low
     df = df[df[['H4_high', 'H4_low']].ne(df[['H4_high', 'H4_low']].shift()).any(axis=1)]
     
+    H4_record.to_csv('H4_levels_directional_bias_check.csv')
+    df.to_csv('H4_Ranges_w_Results.csv')
+
     # Filter rows where Directional_bias and daily_momentum are both positive or both negative
     aligned_df = df[((df['Directional_bias'] > 0) & (df['daily_momentum'] > 0)) |
                     ((df['Directional_bias'] < 0) & (df['daily_momentum'] < 0))]
@@ -473,9 +481,9 @@ def update_daily_momentum(daily_data):
 #####################################################################################################################
 
 # Import 15 min data
-# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/eurusd-m15-bid-2020-09-16-2023-09-16.csv")
+df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/eurusd-m15-bid-2020-09-16-2023-09-16.csv")
 # df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2020-09-16-2023-09-16.csv")
-df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
+# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
 
 # df = df.iloc[(-20*100):]
 df['timestamp'] = pd.to_datetime(df["timestamp"], unit = "ms")
@@ -490,10 +498,6 @@ column_mapping = {
 df = df.rename(columns=column_mapping)
 # Remove rows where 'Volume' is equal to 0
 df = df[df['Volume'] != 0]
-
-pd.set_option('display.max_rows', None)
-print('No volume?',df[df['Volume'] == 0])
-
 
 # Resample to 4-hour data with custom time offset
 h4_data = df.resample('4H', offset='2H').agg({
@@ -535,14 +539,10 @@ H4_low_from_fractal = False
 H4_equ = 0
 directional_bias = 0
 
-
 #### Main Loop ###
 for index, bar in h4_data_fractal.iterrows():
     update_H4_range(bar)
     update_h4_fractals(bar)
-
-H4_record.to_csv('H4_levels_directional_bias_check.csv')
-
 
 high_prob_rate, directional_bias_success_rate, daily_momentum_success_rate = process_results(H4_record, d1_data_momentum)
 print(f"High Probability Success Rate: {high_prob_rate:.2f}%")
