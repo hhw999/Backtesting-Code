@@ -2,15 +2,9 @@
 import pandas as pd
 import yfinance as yf
 import mplfinance as mpf
-import bokeh
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Cursor
 import matplotlib.dates as mdates
-from bokeh.plotting import figure, output_file
-from bokeh.io import output_notebook, show
-from bokeh.resources import INLINE
-from backtesting import Backtest, Strategy
-from backtesting.lib import crossover, plot_heatmaps, resample_apply, barssince
 from datetime import datetime, time, timedelta
 from pytz import UTC  # Import the UTC timezone from pytz library
 from tqdm import tqdm
@@ -687,7 +681,7 @@ def process_results(Closed_orders, H4_record, daily_momentum_data):
 
     # Group by month and sum the 'Return' column
     monthly_returns = Closed_orders['Return'].resample('M').sum().reset_index()
-    Pos_Month_rate = (len(Closed_orders[Closed_orders['Return'] > 0]) / len(Closed_orders)) * 100
+    Pos_Month_rate = round((len(Closed_orders[Closed_orders['Return'] > 0]) / len(Closed_orders)) * 100, 4)
 
     print("Total Return:", Closed_orders['Return'].sum())
     print('Percentage positive months:', Pos_Month_rate)
@@ -764,12 +758,6 @@ def process_results(Closed_orders, H4_record, daily_momentum_data):
     negative_bias_success = non_aligned_df[(non_aligned_df['Directional_bias'] < 0) & (non_aligned_df['result'] == -1)].shape[0]
     total_bias_success = positive_bias_success + negative_bias_success
     Directional_bias_success_rate = (total_bias_success / len(non_aligned_df)) * 100 if len(non_aligned_df) != 0 else 0  # Handle potential division by zero
-    
-    # Calculate successful counts for daily_momentum from non_aligned_df
-    positive_momentum_success = non_aligned_df[(non_aligned_df['daily_momentum'] > 0) & (non_aligned_df['result'] == 1)].shape[0]
-    negative_momentum_success = non_aligned_df[(non_aligned_df['daily_momentum'] < 0) & (non_aligned_df['result'] == -1)].shape[0]
-    total_momentum_success = positive_momentum_success + negative_momentum_success
-    daily_momentum_success_rate = (total_momentum_success / len(non_aligned_df)) * 100 if len(non_aligned_df) != 0 else 0  # Handle potential division by zero
     
     return high_prob_rate, Directional_bias_success_rate
 
@@ -860,19 +848,19 @@ def run(df, Stop_Pips):
 #####################################################################################################################
 # Import 15 min data
 
-# print('GBPUSD Test Analysis')
-# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
+print('GBPUSD Test Analysis')
+df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
 # df = df.iloc[(-40*100):]
-# run(df)
+run(df, 0.0002)
 
-print('EURUSD analysis')
-df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/eurusd-m15-bid-2020-09-16-2023-09-16.csv")
-run(df, 0.0003)
+# print('EURUSD analysis')
+# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/eurusd-m15-bid-2020-09-16-2023-09-16.csv")
+# run(df, 0.0003)
 
-print('GBPUSD analysis')
-df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2020-09-16-2023-09-16.csv")
-run(df, 0.0003)
+# print('GBPUSD analysis')
+# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2020-09-16-2023-09-16.csv")
+# run(df, 0.0003)
 
-print('USDCHF analysis')
-df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/usdchf-m15-bid-2020-09-16-2023-09-16.csv")
-run(df, 0.0003)
+# print('USDCHF analysis')
+# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/usdchf-m15-bid-2020-09-16-2023-09-16.csv")
+# run(df, 0.0003)
