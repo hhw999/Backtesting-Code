@@ -1,0 +1,105 @@
+import pandas as pd
+import yfinance as yf
+import mplfinance as mpf
+import bokeh
+from bokeh.plotting import figure, output_file
+from bokeh.io import output_notebook, show
+from bokeh.resources import INLINE
+from backtesting import Backtest, Strategy
+from backtesting.lib import crossover, plot_heatmaps, resample_apply, barssince
+from datetime import datetime, time
+from pytz import UTC  # Import the UTC timezone from pytz library
+
+# Download the data (return = +2% in 6 total placed trades accross the 2x weeks between 8/8/23 to 19/8/23 when traded manually)
+min15_data = yf.download(tickers = 'GBPUSD=X' ,start="2023-8-6", end="2023-8-19", interval = '15m')
+
+def identify_fractals(data):
+    """Identify fractals based off of code from Trading view"""
+    
+    # Fractal period
+    fractal_period = 5
+    fractal_dates = []
+
+    def is_bill_williams_fractal(high, low, index):
+        if index < 4 or index >= len(high) - 4:
+            return False
+        fractal_high = high[index]
+        fractal_low = low[index]
+        is_high = fractal_high >= max(high[index - 2:index + 2]) and fractal_high >= max(high[index - 1:index + 4])
+        is_low = fractal_low <= min(low[index - 2:index + 2]) and fractal_low <= min(low[index - 1:index + 4])
+        
+        if is_high == True: return +1
+        elif is_low == True: return -1
+        
+    # def is_regular_fractal(high, low, index):
+    #     if index < fractal_period or index >= len(high):
+    #         return False
+    #     fractal_high = high[index]
+    #     fractal_low = low[index]
+    #     is_high = fractal_high >= max(high[index - fractal_period:index + 1])
+    #     is_low = fractal_low <= min(low[index - fractal_period:index + 1])
+        
+    #     if is_high == True: return +1
+    #     elif is_low == True: return -1
+        
+    ## return is_high or is_low + 'regular fractal'
+    # for i in range(len(data)):
+    #     if is_bill_williams_fractal(data['High'], data['Low'], i) == +1 or \
+    #         is_regular_fractal(data['High'], data['Low'], i) == +1:
+    #         print('+1')
+    #         fractal_dates.append((data.index[i], 'fractal_high'))
+        
+    #     elif is_bill_williams_fractal(data['High'], data['Low'], i) == -1 or \
+    #         is_regular_fractal(data['High'], data['Low'], i) == -1:
+    #         print('-1')
+    #         fractal_dates.append((data.index[i], 'fractal_low'))
+
+    # Return high or low fractal
+    for i in range(len(data)):
+        if is_bill_williams_fractal(data['High'], data['Low'], i) == +1:
+            print('+1')
+            fractal_dates.append((data.index[i], 'fractal_high'))
+        
+        elif is_bill_williams_fractal(data['High'], data['Low'], i) == -1:
+            print('-1')
+            fractal_dates.append((data.index[i], 'fractal_low'))
+
+
+    data['Fractal'] = ''
+    for date, fractal_type in fractal_dates:
+        data.loc[date, 'Fractal'] = fractal_type
+
+    # # Filter consecutive "fractal_low" and keep only the lowest low
+    # mask = data['Fractal'] == 'fractal_low'
+    # consecutive_groups = (mask != mask.shift()).cumsum()
+    # for group_id, group_data in data[mask].groupby(consecutive_groups):
+    #     lowest_low_index = group_data['Low'].idxmin()
+    #     data.loc[group_data.index, 'Fractal'] = ''
+    #     data.loc[lowest_low_index, 'Fractal'] = 'fractal_low'
+
+    # # Filter consecutive "fractal_high" and keep only the highest high
+    # mask = data['Fractal'] == 'fractal_high'
+    # consecutive_groups = (mask != mask.shift()).cumsum()
+    # for group_id, group_data in data[mask].groupby(consecutive_groups):
+    #     highest_high_index = group_data['High'].idxmax()
+    #     data.loc[group_data.index, 'Fractal'] = ''
+    #     data.loc[highest_high_index, 'Fractal'] = 'fractal_high'
+
+    data = data.dropna(subset=['Open'])
+    data.index = data.index.tz_localize(None)
+
+    return data
+
+
+h4_data = min15_data.resample('4H', offset='2H').agg({
+        'Open': 'first',
+        'High': 'max',
+        'Low': 'min',
+        'Close': 'last',
+        'Volume': 'sum'
+    })
+
+# Identify fractal H/L for all data (A bit of look ahead bias here?)
+h4_data_fractal_1 = identify_fractals(h4_data)
+print(h4_data_fractal_1.to_string())
+mpf.plot(h4_data, type = 'candle')

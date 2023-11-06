@@ -1,0 +1,377 @@
+import pandas as pd
+import yfinance as yf
+import mplfinance as mpf
+from backtesting import Backtest, Strategy
+from backtesting.lib import crossover, plot_heatmaps, resample_apply, barssince
+from datetime import datetime, time
+from pytz import UTC  # Import the UTC timezone from pytz library
+
+# Download the data
+h1_data = yf.download(tickers='GBPUSD=X', start="2023-7-25", end="2023-8-20", interval='1h')
+min15_data = yf.download(tickers = 'GBPUSD=X' ,start="2023-7-25", end="2023-8-20", interval = '15m')
+
+# Resample to 4-hour data with custom time offset
+h4_data = h1_data.resample('4H', offset='2H').agg({
+    'Open': 'first',
+    'High': 'max',
+    'Low': 'min',
+    'Close': 'last',
+    'Volume': 'sum'
+})
+
+def identify_fractals(data):
+    """Identify fractals based off of code form Trading view"""
+    
+    # Fractal period
+    fractal_period = 5
+    fractal_dates = []
+
+    def is_bill_williams_fractal(high, low, index):
+        if index < 4 or index >= len(high) - 4:
+            return False
+        fractal_high = high[index]
+        fractal_low = low[index]
+        is_high = fractal_high >= max(high[index - 2:index + 3]) and fractal_high >= max(high[index - 1:index + 4])
+        is_low = fractal_low <= min(low[index - 2:index + 3]) and fractal_low <= min(low[index - 1:index + 4])
+        return is_high or is_low
+
+    def is_regular_fractal(high, low, index):
+        if index < fractal_period or index >= len(high):
+            return False
+        fractal_high = high[index]
+        fractal_low = low[index]
+        is_high = fractal_high >= max(high[index - fractal_period:index + 1])
+        is_low = fractal_low <= min(low[index - fractal_period:index + 1])
+        return is_high or is_low
+
+    for i in range(len(data)):
+        if is_bill_williams_fractal(data['High'], data['Low'], i):
+            fractal_dates.append((data.index[i], 'fractal_high'))
+        elif is_regular_fractal(data['High'], data['Low'], i):
+            fractal_dates.append((data.index[i], 'fractal_low'))
+
+    data['Fractal'] = ''
+    for date, fractal_type in fractal_dates:
+        data.loc[date, 'Fractal'] = fractal_type
+
+    # Filter consecutive "fractal_low" and keep only the lowest low
+    mask = data['Fractal'] == 'fractal_low'
+    consecutive_groups = (mask != mask.shift()).cumsum()
+    for group_id, group_data in data[mask].groupby(consecutive_groups):
+        lowest_low_index = group_data['Low'].idxmin()
+        data.loc[group_data.index, 'Fractal'] = ''
+        data.loc[lowest_low_index, 'Fractal'] = 'fractal_low'
+
+    # Filter consecutive "fractal_high" and keep only the highest high
+    mask = data['Fractal'] == 'fractal_high'
+    consecutive_groups = (mask != mask.shift()).cumsum()
+    for group_id, group_data in data[mask].groupby(consecutive_groups):
+        highest_high_index = group_data['High'].idxmax()
+        data.loc[group_data.index, 'Fractal'] = ''
+        data.loc[highest_high_index, 'Fractal'] = 'fractal_high'
+
+    data = data.dropna(subset=['Open'])
+    data.index = data.index.tz_localize(None)
+
+    return data
+
+def check_time_range(current_time):
+    """Function to check if current bar is out of kill zone. Return True if out of KZ."""
+    # Convert the timestamp to UTC timezone
+    # timestamp_utc = timestamp.tz_localize(UTC)
+
+    # # Extract the time from the timestamp
+    # current_time = timestamp_utc.time()
+
+    # Define time ranges in UTC
+    time_range_1_start = time(8, 0)
+    time_range_1_end = time(10, 30)
+    time_range_2_start = time(12, 30)
+    time_range_2_end = time(15, 0)
+
+    # Check if the time is within either of the defined ranges
+    if (time_range_1_start < current_time <= time_range_1_end) or \
+        (time_range_2_start < current_time <= time_range_2_end):
+        return False
+    else:
+        return True
+
+class HTF(Strategy): 
+    position_exposure = 0.01                            #1% of available cash position
+    Stop_Pips = 0.0002                                  #2 pip extra on SL
+    
+    #key levels
+    H4_high = 0                                             
+    H4_low = 0
+    
+    fractal_high = 0
+    fractal_low = 0
+    fractal_high_validity = 0
+    fractal_low_validity = 0
+    Min15_high = 0
+    Min15_low = 0
+    Min15_high_validity = 0
+    Min15_low_validity = 0 
+
+    directional_bias = 0
+    open_orders = []
+
+    def init(self):
+        self.h4_data_fractal = identify_fractals(h4_data)
+        self.min15_data_fractal = identify_fractals(min15_data)
+        self.open_orders = pd.DataFrame(columns=['Type', 'Limit', 'SL', 'TP', 'Size', 'IsOpen'])
+
+        """ plot of price and fractals line chart
+        fractal_values = []
+        # append fractals to data to fractal values for plot
+        for index in h4_data_fractal.index:
+            if h4_data_fractal.loc[index, 'Fractal'] == 'fractal_high':
+                fractal_values.append(1)
+            elif h4_data_fractal.loc[index, 'Fractal'] == 'fractal_low':
+                fractal_values.append(-1)
+            else:
+                fractal_values.append(0)
+        for index in min15_data_fractal.index:
+            if h4_data_fractal.loc[index, 'Fractal'] == 'fractal_high':
+                fractal_values.append(1)
+            elif h4_data_fractal.loc[index, 'Fractal'] == 'fractal_low':
+                fractal_values.append(-1)
+            else:
+                fractal_values.append(0)
+
+        # Plot the candlestick chart with the bar chart as an addplot
+        addplot_bar = mpf.make_addplot(
+            fractal_values,
+            panel=1,
+            secondary_y=False,
+            color='b',
+            alpha=0.5,
+            width=0.5
+        )
+        fig, axlist = mpf.plot(h4_data_fractal, type='candle', addplot=addplot_bar, ylabel='Price', tight_layout=True, returnfig=True)
+        mpf.show()
+        """
+
+    def update_H4_range(self, current_bar):
+        if current_bar['High'] > self.H4_high:
+            self.H4_high = current_bar['High']
+            if self.fractal_low < current_bar['Low']:
+                self.H4_low = self.fractal_low
+            else:
+                self.H4_low = current_bar['Low']
+            self.H4_equ = ((self.H4_high - self.H4_low) / 2) + self.H4_low
+            self.upper_dead = 6 * ((self.H4_high - self.H4_low) / 10) + self.H4_low
+            self.lower_dead = 4 * ((self.H4_high - self.H4_low) / 10) + self.H4_low
+
+        if current_bar['Low'] < self.H4_low:
+            self.H4_low = current_bar['Low']
+            if self.fractal_high > current_bar['High']:
+                self.H4_high = self.fractal_high
+            else:
+                self.H4_high = current_bar['High']
+            self.H4_equ = ((self.H4_high - self.H4_low) / 2) + self.H4_low
+            self.upper_dead = 6 * ((self.H4_high - self.H4_low) / 10) + self.H4_low
+            self.lower_dead = 4 * ((self.H4_high - self.H4_low) / 10) + self.H4_low
+
+    def determine_directional_bias(self):
+        if self.H4_high > 0 and self.H4_low > 0:
+            h4_bars = self.h4_data_fractal.resample('4H').last()
+
+            previous_h4_high = self.H4_high
+            previous_h4_low = self.H4_low
+
+            current_h4_bar = h4_bars.iloc[-1]
+
+            if current_h4_bar['Low'] > previous_h4_high:
+                self.directional_bias = 0  # Setting the bias to 1
+                next_h4_bar = h4_bars.iloc[-2]  # Get the next H4 bar
+                if next_h4_bar['Low'] > previous_h4_high:
+                    self.directional_bias = 2  # Confirm the bias as 2
+                else: self.directional_bias = 2
+            elif current_h4_bar['High'] < previous_h4_low:
+                self.directional_bias = 0  # Setting the bias to -1
+                next_h4_bar = h4_bars.iloc[-2]  # Get the next H4 bar
+                if next_h4_bar['High'] < previous_h4_low:
+                    self.directional_bias = -2  # Confirm the bias as 2
+                else: self.directional_bias = 2
+
+            else:
+                self.directional_bias = 1  # Setting the bias to 0
+
+    def BUY(self, current_bar):
+        '''Buy function. Will place a long limit order'''
+
+        Long_StopLoss = current_bar['Low'] - self.Stop_Pips
+        Long_TakeProfit = current_bar['High'] + 3*(current_bar['High']-Long_StopLoss)
+        # Long_Size = (self.position_exposure * self.equity) / (current_bar['High']-Long_StopLoss)
+        # if Long_TakeProfit > self.H4_high:
+        #     return
+        # else:
+        #     order = self.buy(limit=current_bar['High'], sl= Long_StopLoss, tp = Long_TakeProfit, size = self.position_exposure)
+        #     self.open_orders.append(order)  # Store the open order information
+        #     print('Open Orders', self.open_orders)
+        #     print('order to append', order)
+        
+        # Create a dictionary for the order information
+        new_order = pd.DataFrame({
+            'Type': ['BUY'], 
+            'Limit': [current_bar['High']], 
+            'SL': [Long_StopLoss],
+            'TP': [Long_TakeProfit], 
+            'Size': [self.position_exposure], 
+            'IsOpen': [True]})
+        self.open_orders = pd.concat([self.open_orders, new_order], ignore_index=True)
+
+        print('Open orders:', self.open_orders)
+
+    def SELL(self, current_bar):
+        '''Sell function. Will place a short limit order'''
+       
+        Short_StopLoss = current_bar['High'] + self.Stop_Pips
+        Short_TakeProfit = current_bar['Low'] - 3*(Short_StopLoss-current_bar['Low'])
+        # Short_Size = (self.position_exposure * self.equity) / (Short_StopLoss-current_bar['Low'])
+        # if Short_TakeProfit < self.H4_low:
+        #     return
+        # else:
+        #     order = self.sell(limit=current_bar['Low'], sl = Short_StopLoss, tp = Short_TakeProfit, size = self.position_exposure)
+        #     self.open_orders.append(order)  # Store the open order information
+        #     print('order to append', order)
+
+        # Create a dictionary for the order information
+        new_order = pd.DataFrame({
+            'Type': ['SELL'], 
+            'Limit': [current_bar['Low']], 
+            'SL': [Short_StopLoss],
+            'TP': [Short_TakeProfit], 
+            'Size': [self.position_exposure], 
+            'IsOpen': [True]})
+        self.open_orders = pd.concat([self.open_orders, new_order], ignore_index=True)
+        print('Open orders:', self.open_orders)
+
+    def notify_order(self, order):
+        if order.status == order.Completed:
+            # Find the order in the open_orders DataFrame
+            order_index = self.open_orders[(self.open_orders['Type'] == order.type) &
+                                           (self.open_orders['Limit'] == order.price) &
+                                           (self.open_orders['Size'] == order.size)].index
+
+            if not order_index.empty:
+                self.open_orders.at[order_index[0], 'IsOpen'] = False
+
+    def close_order(self, order):
+        if order['Type'] == 'BUY':
+            self.close(self.buy(limit=order['Limit']))
+        elif order['Type'] == 'SELL':
+            self.cancel(self.sell(limit=order['Limit']))
+
+    def close_pending_orders(self):
+        open_orders_to_close = []
+        print('open orders', self.open_orders)
+        for index, order in self.open_orders.iterrows():
+            print('order:', order)
+            if order['IsOpen']:
+                self.close_order(order)
+                open_orders_to_close.append(order)
+                self.open_orders.at[index, 'IsOpen'] = False
+
+            # Remove closed orders from the list of open orders
+            self.open_orders = [order for order in self.open_orders if order not in open_orders_to_close]
+
+    def next(self):        
+        # Get the current index of self.data
+        current_index = self.data.index[-1]  
+        current_bar = self.min15_data_fractal.loc[current_index]
+        # Convert the timestamp to UTC timezone
+        timestamp_utc = current_index.tz_localize(UTC)
+        # Extract the time from the timestamp
+        current_time = timestamp_utc.time()
+        
+        """Update Key Levels"""
+        # set H4 range
+        if current_index in self.h4_data_fractal.index:
+            h4_data_bar = self.h4_data_fractal.loc[current_index]
+            self.update_H4_range(h4_data_bar)    
+
+        # set last fractal levels
+        if current_bar['Fractal'] == "fractal_high":
+            self.fractal_high = current_bar['High']
+        if current_bar['Fractal'] == "fractal_low":
+            self.fractal_low = current_bar['Low'] 
+
+        # set 15 min range
+        if current_bar['High'] > self.Min15_high:
+            self.Min15_high = current_bar['High']
+            self.Min15_low = self.fractal_low 
+            self.fractal_high_validity = 1
+            self.fractal_low_validity = 1
+        if current_bar['Low'] <  self.Min15_low:
+            self.Min15_low = current_bar['Low']
+            self.Min15_high = self.fractal_high
+            self.fractal_high_validity = 1
+            self.fractal_low_validity = 1
+
+        # Establish if directional bias (SFT)
+        if current_index in self.h4_data_fractal.index:
+            h4_data_bar = self.h4_data_fractal.loc[current_index]
+            self.update_H4_range(h4_data_bar) 
+        self.determine_directional_bias()
+
+        # Check Killzone
+        if check_time_range(current_time):
+            pass 
+        ### !!!!!!!!!!! ADD IN DEAD ZONE CHECK
+        else:
+            if current_bar['High'] < self.H4_high and current_bar['Low'] > self.H4_low:
+
+                    if current_bar['High'] > self.H4_equ:   
+                        if self.directional_bias == 0:                          #If Unconfirmed FT
+                            return
+                        else:
+                            if self.directional_bias == 2:                      #If SFT to up side
+                                if current_bar['Low'] < self.fractal_low:
+                                    if self.fractal_low_validity == 1:
+                                        self.BUY(current_bar)
+                                elif current_bar['Low'] < self.Min15_low:
+                                    if self.Min15_low_validity == 1:
+                                        self.BUY(current_bar)
+
+                            elif current_bar['High'] > self.fractal_high:        #If NFT or FT
+                                if self.fractal_high_validity == 1:
+                                    self.SELL(current_bar)
+                            elif current_bar['High'] > self.Min15_high:
+                                if self.Min15_high_validity == 1:
+                                    self.SELL(current_bar)
+
+                    if current_bar['Low'] < self.H4_equ:
+                        if self.directional_bias == -2:                         #If SFT to down side
+                            if current_bar['High'] > self.fractal_high:
+                                if self.fractal_high_validity == 1:			
+                                    self.SELL(current_bar)
+                            elif current_bar['High'] > self.Min15_high:
+                                if self.Min15_high_validity == 1:
+                                    self.SELL(current_bar)
+        
+                        elif current_bar['Low'] < self.fractal_low:             #If NFT or FT
+                            if self.fractal_low_validity == 1:
+                                self.BUY(current_bar)
+                        elif current_bar['Low'] < self.Min15_low:
+                            if self.Min15_low_validity == 1:
+                                self.BUY(current_bar)
+
+        ### !!!!!!!!!!! Add in continued entry 
+        
+        if current_time == time(10, 30) or current_time == time(15, 0):
+            self.close_pending_orders()
+
+        # update fractal validity
+        if current_bar['High'] > self.fractal_high:
+            self.fractal_high_validity = 0
+        if current_bar['Low'] < self.fractal_low:
+            self.fractal_low_validity = 0 
+
+# Run backtest and print stats/plot
+bt = Backtest(min15_data, HTF, cash = 5_000)
+stats=bt.run()
+bt.plot()
+print(stats)
+# print(stats['_trades'].to_string())
