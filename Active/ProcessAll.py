@@ -19,7 +19,7 @@ def Process_all():
     Order_List = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/Order_List.csv")
 
 
-    Order_List.set_index('Close Datetime', inplace=True)
+    Order_List.set_index('Close_DateTime', inplace=True)
     Order_List.index = pd.to_datetime(Order_List.index)
 
     # print(Order_List.to_string())
@@ -179,5 +179,4 @@ def equity_curve(Order_List):
 
 
 if __name__ == "__main__":
-   # stuff only to run when not called via 'import' here
     Process_all()   

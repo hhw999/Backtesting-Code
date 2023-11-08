@@ -217,15 +217,15 @@ def update_H4_range(current_bar):
             if is_specific_candle_fractal(h4_data, current_bar.name, -1) == 'Low':
                 H4_low= current_bar['Low']
 
-        elif current_bar['Low'] < H4_last_fractal_low:
+        elif current_bar['Low'] <= H4_last_fractal_low:
             H4_low = current_bar['Low']
             # Check if the current bar is a fractal low
-            if current_bar['Fractal'] == 'fractal_low' or is_specific_candle_fractal(h4_data, current_bar.name, -1) == 'Low':
+            if current_bar['Fractal'] == 'fractal_low' or is_specific_candle_fractal(h4_data, current_bar.name, -1) == 'Low' and current_bar['Low']:
                 H4_low_from_fractal = True
             else: H4_low_from_fractal = False 
 
         else:
-            print('Breach to high with no low update')
+            print('Breach to high with no low update', current_bar['Low'], H4_last_fractal_low)
 
         screenshot(current_bar, breached, breached2)
         breached = ''
@@ -260,7 +260,7 @@ def update_H4_range(current_bar):
                 H4_high = current_bar['High']
                 H4_high_from_fractal = True
 
-        elif current_bar['High'] > H4_last_fractal_high or is_specific_candle_fractal(h4_data, current_bar.name, 1) == 'High' and current_bar['High']:
+        elif current_bar['High'] >= H4_last_fractal_high or is_specific_candle_fractal(h4_data, current_bar.name, 1) == 'High' and current_bar['High']:
             H4_high = current_bar['High']
             # Check if the current bar is a fractal high
             if current_bar['Fractal'] == 'fractal_high':
@@ -268,7 +268,7 @@ def update_H4_range(current_bar):
             else: H4_high_from_fractal = False
 
         else:
-            print('Breach to low with no high update')
+            print('Breach to low with no high update', current_bar['High'], H4_last_fractal_high)
 
         screenshot(current_bar, breached, breached2)
         breached = ''
@@ -520,7 +520,7 @@ def get_last_daily_momentum(before_datetime):
 
 def check_15min_entry(data, Stop_Pips):
     """Check for an entry. Place Limit order if entry is found."""
-    global m15_data_fractal, fractal_high, fractal_low, Min15_high, Min15_low, min15_record, fractal_high_validity, fractal_low_validity, recently_updated, Pending_orders, H4_high, H4_low, directional_bias, H4_high_from_fractal, H4_low_from_fractal, h4_data_fractal, d1_data_momentum  # Declare these variables as global
+    global Momentum, m15_data_fractal, fractal_high, fractal_low, Min15_high, Min15_low, min15_record, fractal_high_validity, fractal_low_validity, recently_updated, Pending_orders, H4_high, H4_low, directional_bias, H4_high_from_fractal, H4_low_from_fractal, h4_data_fractal, d1_data_momentum  # Declare these variables as global
 
     Momentum = get_last_daily_momentum(data.name)
     dead_high = H4_low + ((H4_high - H4_low) * 0.55)
@@ -529,53 +529,51 @@ def check_15min_entry(data, Stop_Pips):
     # Continued entries
     if not Pending_orders.empty and check_time_range(data.name.time()):
         for index, order in Pending_orders.iterrows():
-            if (pd.to_datetime(order['Datetime']) == data.name - Timedelta(minutes=15)) and \
-                                                        (((order['Type'] == 'BUY') and (data['Low'] < (order['SL'] + Stop_Pips)) and (data['High'] < order['Limit']))):
-                # can add a "data['Bar'] == "Green" for order["type"] == "SELL" to ensure close above open???? 
+            if (pd.to_datetime(order['Sweep_DateTime']) == data.name - Timedelta(minutes=15)) and \
+                                                        (((order['Buy/Sell'] == 'BUY') and (data['Low'] < (order['SL'] + Stop_Pips)) and (data['High'] < order['Limit']))):
 
                 Pending_orders.drop(index, inplace=True)
-                BUY(data, Stop_Pips)
+                BUY(data, Stop_Pips,(order['SL'] + Stop_Pips), "Continued")
 
-            if (pd.to_datetime(order['Datetime']) == data.name - Timedelta(minutes=15)) and \
-                                                        (((order['Type'] == 'SELL') and (data['High'] > (order['SL']- Stop_Pips)) and (data['Low'] > order['Limit']))):
-                # can add a "data['Bar'] == "Green" for order["type"] == "SELL" to ensure close above open???? 
+            if (pd.to_datetime(order['Sweep_DateTime']) == data.name - Timedelta(minutes=15)) and \
+                                                        (((order['Buy/Sell'] == 'SELL') and (data['High'] > (order['SL']- Stop_Pips)) and (data['Low'] > order['Limit']))):
 
                 Pending_orders.drop(index, inplace=True)
-                SELL(data, Stop_Pips)
+                SELL(data, Stop_Pips, (order['SL']- Stop_Pips), "Continued")
     
     if not Potential_orders.empty and check_time_range(data.name.time()):
         for index, order in Potential_orders.iterrows():
-            if (pd.to_datetime(order['Datetime']) == data.name - Timedelta(minutes=15)) and \
-                                                        (((order['Type'] == 'BUY') and (data['Low'] < (order['SL'] + Stop_Pips)) and (data['High'] < order['Limit']))) \
+            if (pd.to_datetime(order['Sweep_DateTime']) == data.name - Timedelta(minutes=15)) and \
+                                                        (((order['Buy/Sell'] == 'BUY') and (data['Low'] < (order['SL'] + Stop_Pips)) and (data['High'] < order['Limit']))) \
                                                             and (data['High'] < dead_low):
                 # can add a "data['Bar'] == "Green" for order["type"] == "SELL" to ensure close above open???? 
 
                 Potential_orders.drop(index, inplace=True)
-                BUY(data, Stop_Pips)
+                BUY(data, Stop_Pips, order['Liquidity_Level'], "Potential")
 
-            elif (pd.to_datetime(order['Datetime']) == data.name - Timedelta(minutes=15)) and \
-                                                        (((order['Type'] == 'SELL') and (data['High'] > (order['SL']- Stop_Pips)) and (data['Low'] > order['Limit']))) \
+            elif (pd.to_datetime(order['Sweep_DateTime']) == data.name - Timedelta(minutes=15)) and \
+                                                        (((order['Buy/Sell'] == 'SELL') and (data['High'] > (order['SL']- Stop_Pips)) and (data['Low'] > order['Limit']))) \
                                                             and (data['Low'] > dead_high):
                 # can add a "data['Bar'] == "Green" for order["type"] == "SELL" to ensure close above open???? 
 
                 Potential_orders.drop(index, inplace=True)
-                SELL(data, Stop_Pips)
+                SELL(data, Stop_Pips, order['Liquidity_Level'], "Potential")
 
-            elif (pd.to_datetime(order['Datetime']) == data.name - Timedelta(minutes=15)) and \
-                                                        (((order['Type'] == 'BUY') and (data['Low'] < (order['SL'] + Stop_Pips)) and (data['High'] < order['Limit']))) \
+            elif (pd.to_datetime(order['Sweep_DateTime']) == data.name - Timedelta(minutes=15)) and \
+                                                        (((order['Buy/Sell'] == 'BUY') and (data['Low'] < (order['SL'] + Stop_Pips)) and (data['High'] < order['Limit']))) \
                                                             and (data['High'] >= dead_low):
                 # can add a "data['Bar'] == "Green" for order["type"] == "SELL" to ensure close above open???? 
 
                 Potential_orders.drop(index, inplace=True)
-                Potential_BUY(data, Stop_Pips)
+                Potential_BUY(data, Stop_Pips, order['Liquidity_Level'], "Potential")
 
-            elif (pd.to_datetime(order['Datetime']) == data.name - Timedelta(minutes=15)) and \
-                                                        (((order['Type'] == 'SELL') and (data['High'] > (order['SL']- Stop_Pips)) and (data['Low'] > order['Limit']))) \
+            elif (pd.to_datetime(order['Sweep_DateTime']) == data.name - Timedelta(minutes=15)) and \
+                                                        (((order['Buy/Sell'] == 'SELL') and (data['High'] > (order['SL']- Stop_Pips)) and (data['Low'] > order['Limit']))) \
                                                             and (data['Low'] <= dead_high):
                 # can add a "data['Bar'] == "Green" for order["type"] == "SELL" to ensure close above open???? 
 
                 Potential_orders.drop(index, inplace=True)
-                Potential_SELL(data, Stop_Pips)
+                Potential_SELL(data, Stop_Pips, order['Liquidity_Level'], "Potential")
                 
     # Main entries
     if data['High'] > 0 and data['Low'] > 0 and \
@@ -585,7 +583,8 @@ def check_15min_entry(data, Stop_Pips):
         # Not sure if needed, but I guess this stops entries if the current bar is out of H4 range. 
         # Could need a way to stop all entries until H4 is updated?
 
-        if data['High'] > Min15_high or (data['High'] > fractal_high and fractal_high_validity ==1):
+        # m15 level sweep
+        if data['High'] > Min15_high:
             if check_time_range(data.name.time()) and check_sweep_origin(m15_data_fractal, data.name, "Red"):
                 
                 if recently_updated == "up":
@@ -594,14 +593,14 @@ def check_15min_entry(data, Stop_Pips):
                     return
                 
                 if ((directional_bias > 0 or Momentum == 1) and (data['Low'] > dead_high)) or (directional_bias == 2):
-                    SELL(data, Stop_Pips)
+                    SELL(data, Stop_Pips, Min15_high, "Regular")
 
                 elif ((directional_bias > 0 or Momentum == 1) and (data['Low'] <= dead_high)):
-                    Potential_SELL(data, Stop_Pips)
+                    Potential_SELL(data, Stop_Pips, Min15_high, "Potential")
 
             fractal_high_validity = 0
 
-        if data['Low'] < Min15_low or (data['Low'] < fractal_low and fractal_low_validity ==1):
+        if data['Low'] < Min15_low:
             if check_time_range(data.name.time()) and check_sweep_origin(m15_data_fractal, data.name, "Green"):
                 
                 if recently_updated == "down":
@@ -610,10 +609,43 @@ def check_15min_entry(data, Stop_Pips):
                     return
                                 
                 if ((directional_bias < 0 or Momentum == -1) and (data['High'] < dead_low)) or (directional_bias == -2):
-                    BUY(data, Stop_Pips)
+                    BUY(data, Stop_Pips, Min15_low, "Regular")
 
                 elif ((directional_bias < 0 or Momentum == -1) and (data['High'] >= dead_low)):
-                    Potential_BUY(data, Stop_Pips)
+                    Potential_BUY(data, Stop_Pips, Min15_low, "Potential")
+            
+            fractal_low_validity = 0
+
+        # Fractal Sweep
+        if (data['High'] > fractal_high and fractal_high_validity ==1):
+            if check_time_range(data.name.time()) and check_sweep_origin(m15_data_fractal, data.name, "Red"):
+                
+                if recently_updated == "up":
+                    recently_updated = False
+                    set_15min_levels(data)
+                    return
+                
+                if ((directional_bias > 0 or Momentum == 1) and (data['Low'] > dead_high)) or (directional_bias == 2):
+                    SELL(data, Stop_Pips, fractal_high, "Regular")
+
+                elif ((directional_bias > 0 or Momentum == 1) and (data['Low'] <= dead_high)):
+                    Potential_SELL(data, Stop_Pips, fractal_high, "Potential")
+
+            fractal_high_validity = 0
+
+        if (data['Low'] < fractal_low and fractal_low_validity ==1):
+            if check_time_range(data.name.time()) and check_sweep_origin(m15_data_fractal, data.name, "Green"):
+                
+                if recently_updated == "down":
+                    recently_updated = False
+                    set_15min_levels(data)
+                    return
+                                
+                if ((directional_bias < 0 or Momentum == -1) and (data['High'] < dead_low)) or (directional_bias == -2):
+                    BUY(data, Stop_Pips, fractal_low, "Regular")
+
+                elif ((directional_bias < 0 or Momentum == -1) and (data['High'] >= dead_low)):
+                    Potential_BUY(data, Stop_Pips, fractal_low, "Potential")
             
             fractal_low_validity = 0
 
@@ -629,6 +661,7 @@ def check_limit(data, currency):
                 Potential_orders.drop(index, inplace=True)
 
     if not Pending_orders.empty:
+                    
         # Close Pending Orders
         if data.name.time() == time(10,30) or data.name.time() == time(15, 30):
             for index, order in Pending_orders.iterrows():
@@ -636,7 +669,7 @@ def check_limit(data, currency):
 
         # Fill Stop Order if tagged in
         for index, order in Pending_orders.iterrows():
-            if order['Type'] == 'BUY' and data['High'] > order['Limit']:
+            if order['Buy/Sell'] == 'BUY' and data['High'] > order['Limit']:
 
                 if check_news(data, currency):
                     if index in Pending_orders.index:
@@ -644,11 +677,18 @@ def check_limit(data, currency):
                     return
 
                 new_order = pd.DataFrame({
-                'Datetime': [order['Datetime']],
-                'Type': [order['Type']], 
+                'Sweep_DateTime': [order['Sweep_DateTime']],
+                'Tag_DateTime': [data.name],
+                'Buy/Sell': [order['Buy/Sell']], 
                 'Limit': [order['Limit']], 
                 'SL': [order['SL']],
-                'TP': [order['TP']]})
+                'TP': [order['TP']],
+                'H4_High': [order['H4_High']],
+                'H4_Low': [order['H4_Low']],
+                'Bias': [order['Bias']],
+                'Momentum': [order['Momentum']],
+                'Liquidity_Level': [order['Liquidity_Level']],
+                'Type': [order['Type']]})
 
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=FutureWarning)
@@ -656,7 +696,7 @@ def check_limit(data, currency):
                 if index in Pending_orders.index:
                     Pending_orders.drop(index, inplace=True)
  
-            elif order['Type'] == 'SELL' and data['Low'] < order['Limit']:
+            elif order['Buy/Sell'] == 'SELL' and data['Low'] < order['Limit']:
             
                 if check_news(data, currency):
                     if index in Pending_orders.index:
@@ -664,11 +704,18 @@ def check_limit(data, currency):
                     return 
                 
                 new_order = pd.DataFrame({
-                'Datetime': [order['Datetime']],
-                'Type': [order['Type']], 
+                'Sweep_DateTime': [order['Sweep_DateTime']],
+                'Tag_DateTime': [data.name],
+                'Buy/Sell': [order['Buy/Sell']], 
                 'Limit': [order['Limit']], 
                 'SL': [order['SL']],
-                'TP': [order['TP']]})
+                'TP': [order['TP']],
+                'H4_High': [order['H4_High']],
+                'H4_Low': [order['H4_Low']],
+                'Bias': [order['Bias']],
+                'Momentum': [order['Momentum']],
+                'Liquidity_Level': [order['Liquidity_Level']],
+                'Type': [order['Type']]})
 
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=FutureWarning)
@@ -677,11 +724,11 @@ def check_limit(data, currency):
                         Pending_orders.drop(index, inplace=True)     
                            
         # or close if SL is breached before it is tagged in
-            elif order['Type'] == 'BUY' and data['Low'] < order['SL']:
+            elif order['Buy/Sell'] == 'BUY' and data['Low'] < order['SL']:
                 if index in Pending_orders.index:
                     Pending_orders.drop(index, inplace=True)
 
-            elif order['Type'] == 'SELL' and data['High'] > order['SL']:
+            elif order['Buy/Sell'] == 'SELL' and data['High'] > order['SL']:
                 if index in Pending_orders.index:
                     Pending_orders.drop(index, inplace=True)
 
@@ -689,19 +736,28 @@ def check_limit(data, currency):
 
 def check_close(data):
     global Active_orders, Closed_orders
-    if not Active_orders.empty:
+    if not Active_orders.empty:           
 
         for index, order in Active_orders.iterrows():
-            if (order['Type'] == 'BUY' and data['Low'] <= order['SL']) or \
-            (order['Type'] == 'SELL' and data['High'] >= order['SL']):
+            if (order['Buy/Sell'] == 'BUY' and data['Low'] <= order['SL']) or \
+            (order['Buy/Sell'] == 'SELL' and data['High'] >= order['SL']):
                 
+                print("Active Orders \n", Active_orders.to_string())
+
                 new_order = pd.DataFrame({
-                'Datetime': [order['Datetime']],
-                'Type': [order['Type']], 
+                'Sweep_DateTime': [order['Sweep_DateTime']],
+                'Buy/Sell': [order['Buy/Sell']], 
                 'Limit': [order['Limit']], 
                 'SL': [order['SL']],
                 'TP': [order['TP']],
-                'Close Datetime': [data.name],
+                'H4_High': [order['H4_High']],
+                'H4_Low': [order['H4_Low']],
+                'Bias': [order['Bias']],
+                'Momentum': [order['Momentum']],
+                'Liquidity_Level': [order['Liquidity_Level']],
+                'Type': [order['Type']],
+                'Tag_DateTime': [order['Tag_DateTime']],
+                'Close_DateTime': [data.name],
                 'Return': -1})
 
                 with warnings.catch_warnings():
@@ -709,16 +765,26 @@ def check_close(data):
                     Closed_orders = pd.concat([Closed_orders, new_order], ignore_index=True)
                 Active_orders.drop(index, inplace=True)
 
-            elif (order['Type'] == 'BUY' and data['High'] > order['TP']) or \
-            (order['Type'] == 'SELL' and data['Low'] < order['TP']):
+            elif (order['Buy/Sell'] == 'BUY' and data['High'] > order['TP']) or \
+            (order['Buy/Sell'] == 'SELL' and data['Low'] < order['TP']):
                 
+
+                print("Active Orders \n", Active_orders.to_string())
+
                 new_order = pd.DataFrame({
-                'Datetime': [order['Datetime']],
-                'Type': [order['Type']], 
+                'Sweep_DateTime': [order['Sweep_DateTime']],
+                'Buy/Sell': [order['Buy/Sell']], 
                 'Limit': [order['Limit']], 
                 'SL': [order['SL']],
                 'TP': [order['TP']],
-                'Close Datetime': [data.name],
+                'H4_High': [order['H4_High']],
+                'H4_Low': [order['H4_Low']],
+                'Bias': [order['Bias']],
+                'Momentum': [order['Momentum']],
+                'Liquidity_Level': [order['Liquidity_Level']],
+                'Type': [order['Type']],
+                'Tag_DateTime': [order['Tag_DateTime']],
+                'Close_DateTime': [data.name],
                 'Return': 3})
 
                 with warnings.catch_warnings():
@@ -728,46 +794,61 @@ def check_close(data):
                 
         # print('Closed Orders from check_close', Closed_orders)
 
-def Potential_BUY(data, Stop_Pips):
-    global Potential_orders
+def Potential_BUY(data, Stop_Pips, Liquidity, Type):
+    global Potential_orders, H4_high, H4_low, directional_bias, Momentum
 
     Long_StopLoss = round(data['Low'], 4) - Stop_Pips
     Long_TakeProfit = round((data['High'] + (3*(data['High']-Long_StopLoss))),4)
 
     # Add Limit Order to open_orders to track pending orders
     new_order = pd.DataFrame({
-        'Datetime': [data.name],
-        'Type': ['BUY'], 
+        'Sweep_DateTime': [data.name],
+        'Buy/Sell': ['BUY'], 
         'Limit': [round(data['High'], 4)], 
         'SL': [Long_StopLoss],
-        'TP': [Long_TakeProfit]})
+        'TP': [Long_TakeProfit],
+        'H4_High': [H4_high],
+        'H4_Low': [H4_low],
+        'Bias': [directional_bias],
+        'Momentum': [Momentum],
+        'Liquidity_Level':[Liquidity],
+        'Type': [Type]})
     
+
     # print("new order", new_order)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=FutureWarning)
         Potential_orders = pd.concat([Potential_orders, new_order], ignore_index=True)
+        Potential_orders.reset_index(drop=True, inplace=True)
 
-def Potential_SELL(data, Stop_Pips):
-    global Potential_orders
+def Potential_SELL(data, Stop_Pips, Liquidity, Type):
+    global Potential_orders, H4_high, H4_low, directional_bias, Momentum
 
     Short_StopLoss = round(data['High'], 4) + Stop_Pips
     Short_TakeProfit = round((data['Low'] - (3*(Short_StopLoss-data['Low']))),4)
 
     # Add Limit Order to open_orders to track pending orders
     new_order = pd.DataFrame({
-        'Datetime': [data.name],
-        'Type': ['SELL'], 
-        'Limit': [round(data['Low'], 4)], 
+        'Sweep_DateTime': [data.name],
+        'Buy/Sell': ['SELL'], 
+        'Limit': [round(data['High'], 4)], 
         'SL': [Short_StopLoss],
-        'TP': [Short_TakeProfit]})
+        'TP': [Short_TakeProfit],
+        'H4_High': [H4_high],
+        'H4_Low': [H4_low],
+        'Bias': [directional_bias],
+        'Momentum': [Momentum],
+        'Liquidity_Level':[Liquidity],
+        'Type': [Type]})
     
     # print("new order", new_order)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=FutureWarning)
         Potential_orders = pd.concat([Potential_orders, new_order], ignore_index=True)
+        Potential_orders.reset_index(drop=True, inplace=True)
 
-def BUY(data, Stop_Pips):
-    global Pending_orders
+def BUY(data, Stop_Pips, Liquidity, Type):
+    global Pending_orders, H4_high, H4_low, directional_bias, Momentum
 
     Long_StopLoss = round(data['Low'], 4) - Stop_Pips
     Long_TakeProfit = round((data['High'] + (3*(data['High']-Long_StopLoss))),4)
@@ -778,19 +859,29 @@ def BUY(data, Stop_Pips):
 
     # Add Limit Order to open_orders to track pending orders
     new_order = pd.DataFrame({
-        'Datetime': [data.name],
-        'Type': ['BUY'], 
+        'Sweep_DateTime': [data.name],
+        'Buy/Sell': ['BUY'], 
         'Limit': [round(data['High'], 4)], 
         'SL': [Long_StopLoss],
-        'TP': [Long_TakeProfit]})
-    
+        'TP': [Long_TakeProfit],
+        'H4_High': [H4_high],
+        'H4_Low': [H4_low],
+        'Bias': [directional_bias],
+        'Momentum': [Momentum],
+        'Liquidity_Level':[Liquidity],
+        'Type': [Type]})
+
+    print("new order", new_order)
+
+
     # print("new order", new_order)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=FutureWarning)
         Pending_orders = pd.concat([Pending_orders, new_order], ignore_index=True)
+        Pending_orders.reset_index(drop=True, inplace=True)
 
-def SELL(data, Stop_Pips):
-    global Pending_orders
+def SELL(data, Stop_Pips, Liquidity, Type):
+    global Pending_orders, H4_high, H4_low, directional_bias, Momentum
     
     Short_StopLoss = round(data['High'], 4) + Stop_Pips
     Short_TakeProfit = round((data['Low'] - (3*(Short_StopLoss-data['Low']))),4)
@@ -801,17 +892,26 @@ def SELL(data, Stop_Pips):
 
     # Add Limit Order to open_orders to track pending orders
     new_order = pd.DataFrame({
-        'Datetime': [data.name],
-        'Type': ['SELL'], 
-        'Limit': [round(data['Low'], 4)], 
+        'Sweep_DateTime': [data.name],
+        'Buy/Sell': ['SELL'], 
+        'Limit': [round(data['High'], 4)], 
         'SL': [Short_StopLoss],
-        'TP': [Short_TakeProfit]})
-    
+        'TP': [Short_TakeProfit],
+        'H4_High': [H4_high],
+        'H4_Low': [H4_low],
+        'Bias': [directional_bias],
+        'Momentum': [Momentum],
+        'Liquidity_Level':[Liquidity],
+        'Type': [Type]})
+
+    print("new order", new_order)
+
     # print("new order", new_order)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=FutureWarning)
         Pending_orders = pd.concat([Pending_orders, new_order], ignore_index=True)
- 
+        Pending_orders.reset_index(drop=True, inplace=True)
+
 def check_news(data, currency_pair):
     global News
 
@@ -844,7 +944,7 @@ def check_news(data, currency_pair):
 def process_results(Closed_orders, H4_record, daily_momentum_data):
     """Currently, using this function will break the utility of the Process All due to the way it messes with the CLosed Orders and subsequently the Order_List"""
     # Set 'Close Datetime' as the index
-    Closed_orders.set_index('Close Datetime', inplace=True)
+    Closed_orders.set_index('Close DateTime', inplace=True)
     Closed_orders.index = pd.to_datetime(Closed_orders.index)
 
     # H4 Levels Analysis
@@ -960,10 +1060,10 @@ def run(df, Stop_Pips, currency):
     fractal_high, fractal_low, Min15_high, Min15_low, fractal_high_validity, fractal_low_validity = 0,0,0,0,0,0
     min15_record = pd.DataFrame(columns=['Datetime','M15_high', 'M15_low'])
     recently_updated = False
-    Pending_orders = pd.DataFrame(columns = ['Datetime', 'Type', 'Limit', 'SL', 'TP'])
-    Potential_orders = pd.DataFrame(columns = ['Datetime', 'Type', 'Limit', 'SL', 'TP'])
-    Active_orders = pd.DataFrame(columns = ['Datetime', 'Type', 'Limit', 'SL', 'TP'])
-    Closed_orders = pd.DataFrame(columns = ['Datetime', 'Type', 'Limit', 'SL', 'TP', 'Close Datetime','Return'])
+    Pending_orders = pd.DataFrame(columns = ['Sweep_DateTime', 'Buy/Sell', 'Limit', 'SL', 'TP', 'H4_High', 'H4_Low', 'Bias', 'Momentum', 'Type'])
+    Potential_orders = pd.DataFrame(columns = ['Sweep_DateTime', 'Buy/Sell', 'Limit', 'SL', 'TP', 'H4_High', 'H4_Low', 'Bias', 'Momentum', 'Liquidity_Level', 'Type'])
+    Active_orders = pd.DataFrame(columns = ['Sweep_DateTime', 'Buy/Sell', 'Limit', 'SL', 'TP', 'H4_High', 'H4_Low', 'Bias', 'Momentum', 'Liquidity_Level', 'Tag_DateTime', 'Type'])
+    Closed_orders = pd.DataFrame(columns = ['Sweep_DateTime', 'Buy/Sell', 'Limit', 'SL', 'TP', 'H4_High', 'H4_Low', 'Bias', 'Momentum', 'Liquidity_Level', 'Tag_DateTime', 'Type','Close_DateTime','Return'])
 
     #### Main Loop ###
     for  index, bar in tqdm(m15_data_fractal.iterrows()):
@@ -999,7 +1099,7 @@ for filename in os.listdir(Path):
     except Exception as e:
         print(f'Failed to delete {file_path}. Reason: {e}')
 
-Order_List = pd.DataFrame(columns = ['Close Datetime', 'Datetime', 'Type', 'Limit', 'SL', 'TP', 'Return', 'Currency Pair'])
+Order_List = pd.DataFrame(columns = ['Sweep_DateTime', 'Buy/Sell', 'Limit', 'SL', 'TP', 'H4_High', 'H4_Low', 'Bias', 'Momentum', 'Liquidity_Level', 'Tag_DateTime', 'Close_DateTime','Return', 'Type', 'Currency Pair'])
 
 # print('GBPUSD Test Analysis')
 # df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
@@ -1008,7 +1108,7 @@ Order_List = pd.DataFrame(columns = ['Close Datetime', 'Datetime', 'Type', 'Limi
 
 print('EURUSD analysis')
 df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/eurusd-m15-bid-2020-09-16-2023-09-16.csv")
-# df = df.iloc[(-10000):]
+df = df.iloc[(-5000):]
 run(df, 0.0003, "EURUSD")
 
 # print('GBPUSD analysis')
