@@ -81,6 +81,7 @@ def determine_directional_bias(data):
         current_pos = h4_data_fractal.index.get_loc(data.name)
         
         next_h4_bar = get_next_bar_with_data(current_pos)  # Get the next available bar with data
+
         if next_h4_bar is not None:
             # If the next_h4_bar was found, try to find the bar after that
             next_pos_for_bar2 = h4_data_fractal.index.get_loc(next_h4_bar.name)
@@ -91,62 +92,66 @@ def determine_directional_bias(data):
         if data['High'] >= previous_h4_high and H4_high_from_fractal: 
             ### Interaction with upper H4 Level
             
-            if data['Close'] > previous_h4_high and next_h4_bar['High'] > previous_h4_high and next_h4_bar['Close'] > data['High']:#3.11 CHANGE sft, next_h4_bar fully above level
-                #Body close with bar2 body close above 
-                directional_bias = 2  # Set bias as SFT to the up side)
-            
-            elif data['Close'] <= previous_h4_high: #3.9 CHANGE <= to <
-                # Wick Close
-                directional_bias = -1 # Set directional bias NFT to the up side
-                if next_h4_bar['Close'] >= previous_h4_high or next_h4_bar2['Close'] >= previous_h4_high:
-                    # bar2/bar3 body close
-                    directional_bias = 1 # Set directional bias FT to the up side
-            
-            elif data['Close'] > previous_h4_high and next_h4_bar['Close'] <= previous_h4_high:
-                # body close with bar2 closing below level
-                directional_bias = -1 # Set directional bias NFT to the up side
-                if next_h4_bar2['Close'] > previous_h4_high:
-                    # bar3 closing above level after 1x body close
-                    directional_bias = 1 # Set directional bias FT to the up side
-            
-            elif data['Close'] > previous_h4_high and next_h4_bar['Close'] > previous_h4_high:
-                # body close with bar 2 closing above level
-                directional_bias = 1 # set bias as FT to the up side
+            if ((next_h4_bar is not None) and (next_h4_bar2 is not None)) and (isinstance(next_h4_bar, pd.DataFrame) or isinstance(next_h4_bar, pd.Series)):
+                if all(col in next_h4_bar.index for col in ['High', 'Low', 'Open', 'Close']):
 
-            else: print('error in setting directional bias up')
+                    if data['Close'] > previous_h4_high and next_h4_bar['High'] > previous_h4_high and next_h4_bar['Close'] > data['High']:#3.11 CHANGE sft, next_h4_bar fully above level
+                        #Body close with bar2 body close above 
+                        directional_bias = 2  # Set bias as SFT to the up side)
+                    
+                    elif data['Close'] <= previous_h4_high: #3.9 CHANGE <= to <
+                        # Wick Close
+                        directional_bias = -1 # Set directional bias NFT to the up side
+                        if next_h4_bar['Close'] >= previous_h4_high or next_h4_bar2['Close'] >= previous_h4_high:
+                            # bar2/bar3 body close
+                            directional_bias = 1 # Set directional bias FT to the up side
+                    
+                    elif data['Close'] > previous_h4_high and next_h4_bar['Close'] <= previous_h4_high:
+                        # body close with bar2 closing below level
+                        directional_bias = -1 # Set directional bias NFT to the up side
+                        if next_h4_bar2['Close'] > previous_h4_high:
+                            # bar3 closing above level after 1x body close
+                            directional_bias = 1 # Set directional bias FT to the up side
+                    
+                    elif data['Close'] > previous_h4_high and next_h4_bar['Close'] > previous_h4_high:
+                        # body close with bar 2 closing above level
+                        directional_bias = 1 # set bias as FT to the up side
+
+                    else: print('error in setting directional bias up')
+                else: print('Error next_h4_bar is not a valid dataframe with correct columns', next_h4_bar)
+            else: print('Error: next_h4_bar is not a valid DataFrame', next_h4_bar)
         
         elif data['Low'] <= previous_h4_low and H4_low_from_fractal: 
             ### Interaction with lower H4 Level
 
-            if data['Close'] < previous_h4_low and next_h4_bar['Low'] < previous_h4_low and next_h4_bar['Close'] < data['Low']: #3.11 CHANGE sft, next_h4_bar fully below level
-                # Body close with bar 2 body close below level
-                directional_bias = -2 # Set bias a SFT to the down side
-            
-            elif data['Close'] >= previous_h4_low:
-                # Wick close
-                directional_bias = 1 # Set bias as NFT to the down side
-                if next_h4_bar['Close'] <= previous_h4_low or next_h4_bar2['Close'] <= previous_h4_low:
-                    # bar2/bar3 body close
-                    directional_bias = -1 # Set bias as FT to the down side 
+            if ((next_h4_bar is not None) and (next_h4_bar2 is not None)) and (isinstance(next_h4_bar, pd.DataFrame) or isinstance(next_h4_bar, pd.Series)):
+                if all(col in next_h4_bar.index for col in ['High', 'Low', 'Open', 'Close']):
+                
+                    if data['Close'] < previous_h4_low and next_h4_bar['Low'] < previous_h4_low and next_h4_bar['Close'] < data['Low']: #3.11 CHANGE sft, next_h4_bar fully below level
+                        # Body close with bar 2 body close below level
+                        directional_bias = -2 # Set bias a SFT to the down side
+                    
+                    elif data['Close'] >= previous_h4_low:
+                        # Wick close
+                        directional_bias = 1 # Set bias as NFT to the down side
+                        if next_h4_bar['Close'] <= previous_h4_low or next_h4_bar2['Close'] <= previous_h4_low:
+                            # bar2/bar3 body close
+                            directional_bias = -1 # Set bias as FT to the down side 
 
-            elif data['Close'] < previous_h4_low and next_h4_bar['Close'] >= previous_h4_low:
-                # body close with bar 2 closing above level
-                directional_bias = 1 # Set bias as NFT to the down side
-                if next_h4_bar2['Close'] < previous_h4_low:
-                    #bar3 closing below level after 1x body close
-                    directional_bias = -1 # Set bias as FT to the down side
+                    elif data['Close'] < previous_h4_low and next_h4_bar['Close'] >= previous_h4_low:
+                        # body close with bar 2 closing above level
+                        directional_bias = 1 # Set bias as NFT to the down side
+                        if next_h4_bar2['Close'] < previous_h4_low:
+                            #bar3 closing below level after 1x body close
+                            directional_bias = -1 # Set bias as FT to the down side
 
-            elif data['Close'] < previous_h4_low and next_h4_bar['Close'] < previous_h4_low:
-                # body close with bar 2 closing below level
-                directional_bias = -1 # set bias as FT to the down side
+                    elif data['Close'] < previous_h4_low and next_h4_bar['Close'] < previous_h4_low:
+                        # body close with bar 2 closing below level
+                        directional_bias = -1 # set bias as FT to the down side
 
-            else: 
-                print('error in setting directional bias down', data.name)
-                print(data)
-                print('preivous H4 Low', previous_h4_low)
-                print('Next Bar', next_h4_bar)
-                print('Next Bar2', next_h4_bar2)
-                print(h4_data_fractal[data.name-4:data.name+4])
+                    else: print('error in setting directional bias down')
+                else: print('Error next_h4_bar is not a valid dataframe with correct columns', next_h4_bar)
+            else: print('Error: next_h4_bar is not a valid DataFrame', next_h4_bar)
         
         elif data['High'] >= previous_h4_high and H4_high_from_fractal == False: pass 
         elif data['Low'] <= previous_h4_low and H4_low_from_fractal == False: pass
@@ -164,7 +169,9 @@ def screenshot(current_bar, breached=None, breached2=None):
         'Directional_bias': [directional_bias], 
         'Last_Fractal_High': [H4_last_fractal_high], 
         'Last_Fractal_Low': [H4_last_fractal_low], 
-        'result': ['']  # initialize with empty string
+        'result': [''],
+        'Bar_High': [current_bar['High']],
+        'Bar_Low': [current_bar['Low']]
     })
 
     # Check for breached variable and update previous rows if needed
@@ -592,10 +599,10 @@ def check_15min_entry(data, Stop_Pips):
                     set_15min_levels(data)
                     return
                 
-                if ((directional_bias > 0 or Momentum == 1) and (data['Low'] > dead_high)) or (directional_bias == 2):
-                    SELL(data, Stop_Pips, Min15_high, "Regular")
+                if ((directional_bias < 0 or Momentum == -1) and (data['Low'] > dead_high)) or (directional_bias == -2):
+                    SELL(data, Stop_Pips, Min15_high, "M15Sweep")
 
-                elif ((directional_bias > 0 or Momentum == 1) and (data['Low'] <= dead_high)):
+                elif ((directional_bias < 0 or Momentum == -1) and (data['Low'] <= dead_high)):
                     Potential_SELL(data, Stop_Pips, Min15_high, "Potential")
 
             fractal_high_validity = 0
@@ -607,11 +614,11 @@ def check_15min_entry(data, Stop_Pips):
                     recently_updated = False
                     set_15min_levels(data)
                     return
-                                
-                if ((directional_bias < 0 or Momentum == -1) and (data['High'] < dead_low)) or (directional_bias == -2):
-                    BUY(data, Stop_Pips, Min15_low, "Regular")
+                
+                if ((directional_bias > 0 or Momentum == 1) and (data['High'] < dead_low)) or (directional_bias == 2):
+                    BUY(data, Stop_Pips, Min15_low, "M15Sweep")
 
-                elif ((directional_bias < 0 or Momentum == -1) and (data['High'] >= dead_low)):
+                elif ((directional_bias > 0 or Momentum == 1) and (data['High'] >= dead_low)):
                     Potential_BUY(data, Stop_Pips, Min15_low, "Potential")
             
             fractal_low_validity = 0
@@ -625,10 +632,10 @@ def check_15min_entry(data, Stop_Pips):
                     set_15min_levels(data)
                     return
                 
-                if ((directional_bias > 0 or Momentum == 1) and (data['Low'] > dead_high)) or (directional_bias == 2):
-                    SELL(data, Stop_Pips, fractal_high, "Regular")
+                if ((directional_bias < 0 or Momentum == -1) and (data['Low'] > dead_high)) or (directional_bias == -2):
+                    SELL(data, Stop_Pips, fractal_high, "FractalSweep")
 
-                elif ((directional_bias > 0 or Momentum == 1) and (data['Low'] <= dead_high)):
+                elif ((directional_bias < 0 or Momentum == -1) and (data['Low'] <= dead_high)):
                     Potential_SELL(data, Stop_Pips, fractal_high, "Potential")
 
             fractal_high_validity = 0
@@ -641,10 +648,10 @@ def check_15min_entry(data, Stop_Pips):
                     set_15min_levels(data)
                     return
                                 
-                if ((directional_bias < 0 or Momentum == -1) and (data['High'] < dead_low)) or (directional_bias == -2):
-                    BUY(data, Stop_Pips, fractal_low, "Regular")
+                if ((directional_bias > 0 or Momentum == 1) and (data['High'] < dead_low)) or (directional_bias == 2):
+                    BUY(data, Stop_Pips, fractal_low, "FractalSweep")
 
-                elif ((directional_bias < 0 or Momentum == -1) and (data['High'] >= dead_low)):
+                elif ((directional_bias > 0 or Momentum == 1) and (data['High'] >= dead_low)):
                     Potential_BUY(data, Stop_Pips, fractal_low, "Potential")
             
             fractal_low_validity = 0
@@ -742,7 +749,7 @@ def check_close(data):
             if (order['Buy/Sell'] == 'BUY' and data['Low'] <= order['SL']) or \
             (order['Buy/Sell'] == 'SELL' and data['High'] >= order['SL']):
                 
-                print("Active Orders \n", Active_orders.to_string())
+                # print("Active Orders \n", Active_orders.to_string())
 
                 new_order = pd.DataFrame({
                 'Sweep_DateTime': [order['Sweep_DateTime']],
@@ -769,7 +776,7 @@ def check_close(data):
             (order['Buy/Sell'] == 'SELL' and data['Low'] < order['TP']):
                 
 
-                print("Active Orders \n", Active_orders.to_string())
+                # print("Active Orders \n", Active_orders.to_string())
 
                 new_order = pd.DataFrame({
                 'Sweep_DateTime': [order['Sweep_DateTime']],
@@ -831,7 +838,7 @@ def Potential_SELL(data, Stop_Pips, Liquidity, Type):
     new_order = pd.DataFrame({
         'Sweep_DateTime': [data.name],
         'Buy/Sell': ['SELL'], 
-        'Limit': [round(data['High'], 4)], 
+        'Limit': [round(data['Low'], 4)], 
         'SL': [Short_StopLoss],
         'TP': [Short_TakeProfit],
         'H4_High': [H4_high],
@@ -871,7 +878,7 @@ def BUY(data, Stop_Pips, Liquidity, Type):
         'Liquidity_Level':[Liquidity],
         'Type': [Type]})
 
-    print("new order", new_order)
+    # print("new order", new_order)
 
 
     # print("new order", new_order)
@@ -894,7 +901,7 @@ def SELL(data, Stop_Pips, Liquidity, Type):
     new_order = pd.DataFrame({
         'Sweep_DateTime': [data.name],
         'Buy/Sell': ['SELL'], 
-        'Limit': [round(data['High'], 4)], 
+        'Limit': [round(data['Low'], 4)], 
         'SL': [Short_StopLoss],
         'TP': [Short_TakeProfit],
         'H4_High': [H4_high],
@@ -904,7 +911,7 @@ def SELL(data, Stop_Pips, Liquidity, Type):
         'Liquidity_Level':[Liquidity],
         'Type': [Type]})
 
-    print("new order", new_order)
+    # print("new order", new_order)
 
     # print("new order", new_order)
     with warnings.catch_warnings():
@@ -1014,6 +1021,8 @@ def run(df, Stop_Pips, currency):
     # Remove rows where 'Volume' is equal to 0
     df = df[df['Volume'] != 0]
 
+
+
     # Resample to 4-hour data with custom time offset 
     h4_data = df.resample('4H', offset='2H').agg({
         'Open': 'first',
@@ -1022,6 +1031,9 @@ def run(df, Stop_Pips, currency):
         'Close': 'last',
         'Volume': 'sum'
     })
+
+    h4_data.to_csv(os.path.join(Path, 'PriceData.csv'))
+
 
     # Resample to daily data 3.11 CHANGE to weekly data
     d1_data = df.resample('1D').agg({
@@ -1044,7 +1056,7 @@ def run(df, Stop_Pips, currency):
     d1_data_momentum = update_daily_momentum(d1_data_fractal)
 
     # Create the H4 record 
-    H4_record = pd.DataFrame(columns=['Datetime','H4_high', 'H4_low','Last_Fractal_High','Last_Fractal_Low', 'Directional_bias'])
+    H4_record = pd.DataFrame(columns=['Datetime','H4_high', 'H4_low','Last_Fractal_High','Last_Fractal_Low', 'Directional_bias','Bar_High', 'Bar_Low'])
 
     # H4 Variables
     H4_last_fractal_high = 0
@@ -1074,10 +1086,14 @@ def run(df, Stop_Pips, currency):
             update_H4_range(bar)
             update_h4_fractals(bar)
 
+    H4_record.to_csv(os.path.join(Path, 'H4_Record.csv'), index=False)
+
     # Closed orders to Order_Lits
     Closed_orders['Currency Pair'] = currency 
 
-    Order_List = pd.concat([Order_List, Closed_orders], ignore_index = False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=FutureWarning)
+        Order_List = pd.concat([Order_List, Closed_orders], ignore_index = False)
     # Rename index
     # Order_List = Order_List.rename_axis('Close Datetime')
     # Drop empty column
@@ -1101,26 +1117,42 @@ for filename in os.listdir(Path):
 
 Order_List = pd.DataFrame(columns = ['Sweep_DateTime', 'Buy/Sell', 'Limit', 'SL', 'TP', 'H4_High', 'H4_Low', 'Bias', 'Momentum', 'Liquidity_Level', 'Tag_DateTime', 'Close_DateTime','Return', 'Type', 'Currency Pair'])
 
-# print('GBPUSD Test Analysis')
-# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2022-09-16-2023-09-16.csv")
-# df = df.iloc[(-50*100):]
-# run(df, 0.0003, "GBPUSD")
-
 print('EURUSD analysis')
 df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/eurusd-m15-bid-2020-09-16-2023-09-16.csv")
-df = df.iloc[(-5000):]
+df = df.iloc[(-30000):]
 run(df, 0.0003, "EURUSD")
 
 # print('GBPUSD analysis')
 # df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2020-09-16-2023-09-16.csv")
-# # df = df.iloc[(-10000):]
+# df = df.iloc[(-30000):]
 # run(df, 0.0003, "GBPUSD")
 
 # print('USDCHF analysis')
 # df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/usdchf-m15-bid-2020-09-16-2023-09-16.csv")
-# # df = df.iloc[(-50*100):]
+# df = df.iloc[(-30000):]
 # run(df, 0.0003, "USDCHF")
 
+# print('AUDUSD analysis')
+# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/audusd-m15-bid-2020-09-16-2023-09-16.csv")
+# df = df.iloc[(-30000):]
+# run(df, 0.0003, "AUDUSD")
+
+# print('GBPJPY analysis')
+# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpjpy-m15-bid-2020-09-16-2023-09-16.csv")
+# df = df.iloc[(-30000):]
+# run(df, 0.0005, "GBPJPY")
+
+# print('USDCAD analysis')
+# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/usdcad-m15-bid-2020-09-16-2023-09-16.csv")
+# df = df.iloc[(-30000):]
+# run(df, 0.0003, "USDCAD")
+
+# print('USDJPY analysis')
+# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/usdjpy-m15-bid-2020-09-16-2023-09-16.csv")
+# df = df.iloc[(-30000):]
+# run(df, 0.0003, "USDJPY")
+
+# plotH4(H4_record)
 
 if not os.path.exists(Path):
     os.makedirs(Path)

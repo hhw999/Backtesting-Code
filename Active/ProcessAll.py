@@ -9,6 +9,7 @@ import matplotlib.dates as mdates
 from datetime import datetime, time, timedelta
 from pytz import UTC  # Import the UTC timezone from pytz library
 import os
+import PlotTrades
     
 def Process_all():
     Path = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/'
@@ -82,12 +83,20 @@ def Process_all():
     # Plot equity curve and output monthly account results
     equity_curve(Order_List)
 
+    pair = 'eurusd'
+    order_list_file = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/Order_List.csv'
+    price_data_file = f'/Users/hugowatkinson/Documents/Trading/Historical Data/{pair}-m15-bid-2020-09-16-2023-09-16.csv'
+    output_folder = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/output_plots'
+    PlotTrades.process_trades(order_list_file, price_data_file, output_folder, 50)
+
 def equity_curve(Order_List):
 
     start_equity = 100000
     profit_split = 0.8
 
     Total_Pay_Out = 0
+    Accounts_Bought = 1
+    Account_Cost = 300
     Account_Record = pd.DataFrame(columns=['Date', 'Payout', 'Deficit'])
 
     Path = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/'
@@ -120,7 +129,7 @@ def equity_curve(Order_List):
     Order_List.at[Order_List.index.min(), 'Equity'] = start_equity
     Order_List['Return'] = Order_List['Return'].fillna(0)
 
-    print('Order list \n', Order_List.to_string())
+    # print('Order list \n', Order_List.to_string())
 
     last_processed_month = None
 
@@ -132,13 +141,15 @@ def equity_curve(Order_List):
             Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1]
         elif Order_List['Equity'].iloc[i-1] < (start_equity * 0.9):
             print("ACCOUNT LOST")
-            break
+            Accounts_Bought += 1
+            Order_List['Equity'].iloc[i] = start_equity
+            # break
         elif Order_List['Return'].iloc[i] == 3:
             # print("return3", i)
-            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] * 1.03
+            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] * 1.029
         elif Order_List['Return'].iloc[i] == -1:
             # print("return-1", i)
-            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] * 0.99
+            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] * 0.989
 
         current_month = Order_List.index[i].month
 
@@ -162,8 +173,10 @@ def equity_curve(Order_List):
                 print("Breakeven month")
 
 
-    print("Total payout: £", Total_Pay_Out)
-    print("order list equity \n", Order_List['Equity'].to_string())
+    print("Total payouts: £", Total_Pay_Out)
+    print("Total accounts costs:", (Accounts_Bought*Account_Cost))
+    print("Total takeaway: £", (Total_Pay_Out - (Accounts_Bought*Account_Cost)))
+    # print("order list equity \n", Order_List['Equity'].to_string())
     # print("Account record \n", Account_Record)
     Account_Record.to_csv(os.path.join(Path,f"Account_Record.csv"))
 
