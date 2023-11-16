@@ -19,6 +19,47 @@ def create_candlestick_plot(trade, price_data, output_folder, num_bars_before):
                                          high=trade_price_data['High'],
                                          low=trade_price_data['Low'],
                                          close=trade_price_data['Close'])])
+    
+    H4_high = trade['H4_High']
+    H4_low = trade['H4_Low']
+    dead_high = H4_low + ((H4_high - H4_low) * 0.55)
+    dead_low = H4_low + ((H4_high - H4_low) * 0.45)
+
+    y_lines = pd.DataFrame({'H4_High': [H4_high],
+                            'H4_Low': [H4_low],
+                            'Upper_Dead': [dead_high],
+                            'Lower_Dead': [dead_low],
+                            'Liquidity': [trade['Liquidity_Level']]
+                            })
+
+    # Add horizontal lines if specified
+    for _, row in y_lines.iterrows():
+        for column, y in row.items():
+            fig.add_shape(
+                go.layout.Shape(
+                    type="line",
+                    x0=trade_price_data.index.min(),
+                    x1=trade_price_data.index.max(),
+                    y0=y,
+                    y1=y,
+                    line=dict(color="red", width=2),
+                )
+            )
+
+            # Add annotation (text label) for the line
+            fig.add_annotation(
+                go.layout.Annotation(
+                    x=trade_price_data.index.max(),
+                    y=y,
+                    text=f'{column}: {y}',  # Add labels here
+                    showarrow=False,
+                    xref='x',
+                    yref='y',
+                    xanchor='left',
+                    yanchor='bottom',
+                )
+            )
+
 
     fig.update_layout(title=f'Candlestick Plot - {trade_start} to {trade_end}',
                       xaxis_title='Date',
