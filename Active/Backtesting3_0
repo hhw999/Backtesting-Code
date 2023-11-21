@@ -227,7 +227,7 @@ def update_H4_range(current_bar):
         elif current_bar['Low'] <= H4_last_fractal_low:
             H4_low = current_bar['Low']
             # Check if the current bar is a fractal low
-            if current_bar['Fractal'] == 'fractal_low' or is_specific_candle_fractal(h4_data, current_bar.name, -1) == 'Low' and current_bar['Low']:
+            if current_bar['Fractal'] == 'fractal_low' or (is_specific_candle_fractal(h4_data, current_bar.name, -1) == 'Low' and current_bar['Low']):
                 H4_low_from_fractal = True
             else: H4_low_from_fractal = False 
 
@@ -796,7 +796,7 @@ def check_close(data):
                 'Type': [order['Type']],
                 'Tag_DateTime': [order['Tag_DateTime']],
                 'Close_DateTime': [data.name],
-                'Return': 3})
+                'Return': 3 })
 
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=FutureWarning)
@@ -807,7 +807,7 @@ def Potential_BUY(data, Stop_Pips, Liquidity, Type):
     global Potential_orders, H4_high, H4_low, directional_bias, Momentum
 
     Long_StopLoss = round(data['Low'], 5) - Stop_Pips
-    Long_TakeProfit = round((data['High'] + (3*(data['High']-Long_StopLoss))),5)
+    Long_TakeProfit = round((data['High'] + (3 *(data['High']-Long_StopLoss))),5)
 
     # Add Limit Order to open_orders to track pending orders
     new_order = pd.DataFrame({
@@ -834,7 +834,7 @@ def Potential_SELL(data, Stop_Pips, Liquidity, Type):
     global Potential_orders, H4_high, H4_low, directional_bias, Momentum
 
     Short_StopLoss = round(data['High'], 5) + Stop_Pips
-    Short_TakeProfit = round((data['Low'] - (3*(Short_StopLoss-data['Low']))),5)
+    Short_TakeProfit = round((data['Low'] - (3 *(Short_StopLoss-data['Low']))),5)
 
     # Add Limit Order to open_orders to track pending orders
     new_order = pd.DataFrame({
@@ -860,7 +860,7 @@ def BUY(data, Stop_Pips, Liquidity, Type):
     global Pending_orders, H4_high, H4_low, directional_bias, Momentum
 
     Long_StopLoss = round(data['Low'], 5) - Stop_Pips
-    Long_TakeProfit = round((data['High'] + (3*(data['High']-Long_StopLoss))),5)
+    Long_TakeProfit = round((data['High'] + (3 *(data['High']-Long_StopLoss))),5)
 
     if (Long_TakeProfit >= H4_high - (0.1 * (H4_high - H4_low))) or (any(Pending_orders['Buy/Sell'] == 'BUY')):
         # can add a boundary under the H4_high? like top 95% is a dead zone?
@@ -892,7 +892,7 @@ def SELL(data, Stop_Pips, Liquidity, Type):
     global Pending_orders, H4_high, H4_low, directional_bias, Momentum
     
     Short_StopLoss = round(data['High'], 5) + Stop_Pips
-    Short_TakeProfit = round((data['Low'] - (3*(Short_StopLoss-data['Low']))),5)
+    Short_TakeProfit = round((data['Low'] - (3 *(Short_StopLoss-data['Low']))),5)
 
     if (Short_TakeProfit <= H4_low + (0.1 * (H4_high - H4_low))) or (any(Pending_orders['Buy/Sell'] == 'SELL')):
         # can add a boundary under the H4_high? like top 95% is a dead zone?
@@ -1022,8 +1022,6 @@ def run(df, Stop_Pips, currency):
     # Remove rows where 'Volume' is equal to 0
     df = df[df['Volume'] != 0]
 
-
-
     # Resample to 4-hour data with custom time offset 
     h4_data = df.resample('4H', offset='2H').agg({
         'Open': 'first',
@@ -1034,7 +1032,6 @@ def run(df, Stop_Pips, currency):
     })
 
     h4_data.to_csv(os.path.join(Path, 'PriceData.csv'))
-
 
     # Resample to daily data 3.11 CHANGE to weekly data
     d1_data = df.resample('1D').agg({
@@ -1084,8 +1081,9 @@ def run(df, Stop_Pips, currency):
         check_close(bar)
         check_15min_entry(bar, Stop_Pips)
         if index in h4_data_fractal.index:
-            update_H4_range(bar)
-            update_h4_fractals(bar)
+            h4_row = h4_data_fractal.loc[index]
+            update_H4_range(h4_row)
+            update_h4_fractals(h4_row)
 
     H4_record.to_csv(os.path.join(Path, 'H4_Record.csv'), index=False)
 
