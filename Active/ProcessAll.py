@@ -12,12 +12,12 @@ import os
 import PlotTrades
     
 def Process_all():
-    Path = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/'
+    Path = r'C:\Users\hwatk\Trading\Backtesting-Code-2\Active\Output'
     if not os.path.exists(Path):
         os.makedirs(Path, exist_ok=True)
 
     # Sort by datetime index
-    Order_List = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/Order_List.csv")
+    Order_List = pd.read_csv(r"C:\Users\hwatk\Trading\Backtesting-Code-2\Active\Output\Order_List.csv")
 
 
     Order_List.set_index('Close_DateTime', inplace=True)
@@ -84,9 +84,9 @@ def Process_all():
     equity_curve(Order_List)
 
     pair = 'eurusd'
-    order_list_file = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/Order_List.csv'
-    price_data_file = f'/Users/hugowatkinson/Documents/Trading/Historical Data/{pair}-m15-bid-2020-09-16-2023-09-16.csv'
-    output_folder = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/output_plots'
+    order_list_file = r"C:\Users\hwatk\Trading\Backtesting-Code-2\Active\Output\Order_List.csv"
+    price_data_file = f'C:\\Users\\hwatk\\Trading\\Backtesting-Code-2\\Historical Data\\{pair}-m15-bid-2020-09-16-2023-09-16.csv'
+    output_folder = r"C:\Users\hwatk\Trading\Backtesting-Code-2\Active\Output\output_plots"
     PlotTrades.process_trades(order_list_file, price_data_file, output_folder, 50)
 
 def equity_curve(Order_List):
@@ -99,7 +99,7 @@ def equity_curve(Order_List):
     Account_Cost = 300
     Account_Record = pd.DataFrame(columns=['Date', 'Payout', 'Deficit'])
 
-    Path = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/'
+    Path = r"C:\Users\hwatk\Trading\Backtesting-Code-2\Active\Output"
     
     # print('order list \n', Order_List.to_string())
 
@@ -136,6 +136,9 @@ def equity_curve(Order_List):
     # Loop through orders and update Equity
     for i in range(1, len(Order_List)):
 
+        if Order_List['Equity'].iloc[i-1] < (start_equity * 0.93): EquityMultiplier = 0.5
+        else: EquityMultiplier = 1
+
         if pd.isna(Order_List['Return'].iloc[i]) or ((Order_List['Return'].iloc[i]) == 0) :
             # print("IS NA", i)
             Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1]
@@ -145,11 +148,11 @@ def equity_curve(Order_List):
             Order_List['Equity'].iloc[i] = start_equity
             # break
         elif Order_List['Return'].iloc[i] == 3:
-            # print("return3", i)
-            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] * 1.029
+            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] * (1 + (0.015 * EquityMultiplier) - 0.0005) # 3% reward
         elif Order_List['Return'].iloc[i] == -1:
-            # print("return-1", i)
-            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] * 0.989
+            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] * (1 - (0.01 * EquityMultiplier) - 0.0005) # 1% risk 
+        elif Order_List['Return'].iloc[i] == 0:
+            Order_List.iloc[i, Order_List.columns.get_loc('Equity')] = Order_List['Equity'].iloc[i-1] #Breakeven 
 
         current_month = Order_List.index[i].month
 

@@ -179,40 +179,6 @@ def determine_directional_bias(data):
         # print('H4 record directional bias on close', h4_data_fractal.loc[next_h4_bar.name, 'Directional_bias']) 
         # print('H4 record directional bias on close', h4_data_fractal.loc[next_h4_bar2.name, 'Directional_bias'])
 
-# def screenshot(current_bar, breached=None, breached2=None):
-#     global H4_high, H4_low, directional_bias, H4_record, H4_last_fractal_high, H4_last_fractal_low
-
-#     # Create new row
-#     new_data = pd.DataFrame({
-#         'Datetime': [current_bar.name], 
-#         'H4_high': [H4_high], 
-#         'H4_low': [H4_low], 
-#         'Directional_bias': [directional_bias], 
-#         'Last_Fractal_High': [H4_last_fractal_high], 
-#         'Last_Fractal_Low': [H4_last_fractal_low], 
-#         'result': [''],
-#         'Bar_High': [current_bar['High']],
-#         'Bar_Low': [current_bar['Low']]
-#     })
-
-#     # Check for breached variable and update previous rows if needed
-#     if breached is not None:
-#         for index, row in H4_record.iterrows():
-#             if row['H4_high'] == breached:
-#                 if row['H4_low'] == breached2:
-#                     H4_record.at[index, 'result'] = 1
-
-#             elif row['H4_low'] == breached:
-#                 if row['H4_high'] == breached2:
-
-#                     H4_record.at[index, 'result'] = -1
-
-        
-#     # Append the new data to H4_record
-#     with warnings.catch_warnings():
-#         warnings.simplefilter("ignore", category=FutureWarning)
-#         H4_record = pd.concat([H4_record, new_data], ignore_index=True)
-
 def update_H4_range(current_bar):
     """Updates H4 range to define trading range"""
     global H4_high, H4_low, H4_record, directional_bias, H4_high_from_fractal, H4_low_from_fractal, h4_data  # Declare these variables as global
@@ -321,36 +287,11 @@ def update_h4_fractals(data):
         H4_last_fractal_high = data['High']
         if is_specific_candle_fractal(h4_data, data.name, -1) == 'Low':
             H4_last_fractal_low == data['Low']
-        # screenshot(data)
 
     if data['Fractal'] == "fractal_low":
         H4_last_fractal_low = data['Low'] 
         if is_specific_candle_fractal(h4_data, data.name, 1) == 'High':
             H4_last_fractal_high == data['High']
-        # screenshot(data)
-        
-# # def plotH4(data):
-#     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
-#     ax1.plot(data['Datetime'], data['H4_high'], label='H4 High', color='green')
-#     ax1.plot(data['Datetime'], data['H4_low'], label='H4 Low', color='red')
-#     ax1.set_ylabel('Price')
-#     ax1.set_title('H4 High and Low Over Time')
-#     ax1.legend()
-#     ax2.plot(data['Datetime'], data['Directional_bias'], label='Directional Bias', color='blue')
-#     ax2.set_ylabel('Directional Bias')
-#     ax2.set_title('Directional Bias Over Time')
-#     ax2.legend()
-#     ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S'))  # Format dates as you prefer
-#     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S'))
-#     ax1.xaxis.set_major_locator(mdates.HourLocator(interval=4))
-#     ax2.xaxis.set_major_locator(mdates.HourLocator(interval=4))
-#     plt.setp(ax1.get_xticklabels(), rotation=45)
-#     plt.setp(ax2.get_xticklabels(), rotation=45)
-#     ax1.grid(True)
-#     ax2.grid(True)
-#     plt.tight_layout()
-#     mpf.plot(h4_data, type='candle', style='yahoo', title='Candlestick Chart', ylabel='Price')
-#     plt.show()
 
 def is_specific_candle_fractal(data, timestamp, HighLow):
     """Checks if the current bar is a fractal high/low.
@@ -811,11 +752,12 @@ def check_limit(data, currency):
 
         # print('Active Orders from check_limit_close', Active_orders)
 
-def check_close(data):
+def check_close(data, currency):
     global Active_orders, Closed_orders
     if not Active_orders.empty:           
 
         for index, order in Active_orders.iterrows():
+
             if (order['Buy/Sell'] == 'BUY' and data['Low'] <= order['SL']) or \
             (order['Buy/Sell'] == 'SELL' and data['High'] >= order['SL']):
                                 
@@ -1020,57 +962,6 @@ def check_news(data, currency_pair):
 
     return False  # No news release within 30 minutes
 
-# def process_results(Closed_orders, H4_record, daily_momentum_data):
-#     """Currently, using this function will break the utility of the Process All due to the way it messes with the CLosed Orders and subsequently the Order_List"""
-#     # Set 'Close Datetime' as the index
-#     Closed_orders.set_index('Close DateTime', inplace=True)
-#     Closed_orders.index = pd.to_datetime(Closed_orders.index)
-
-#     # H4 Levels Analysis
-#     # Merge daily momentum data into df based on the index
-#     df = H4_record
-#     if isinstance(H4_record.index, pd.DatetimeIndex):
-#         df['date'] = df.index.date
-#     else:
-#         df['date'] = pd.to_datetime(df['Datetime']).dt.date
-
-#     daily_momentum_data = daily_momentum_data.copy()
-#     daily_momentum_data.loc[:, 'date'] = daily_momentum_data.index.date
-
-#     # Merge daily momentum data into df based on the 'date'
-#     df = df.merge(daily_momentum_data, on='date', how='left')
-#     df.drop('date', axis=1, inplace=True)
-
-#     # # Remove rows where Directional_bias is 0
-#     # df = df[(df['Directional_bias'] != 0)]
-
-#     # Drop consecutive duplicates based on H4_high and H4_low
-#     df = df[df[['H4_high', 'H4_low']].ne(df[['H4_high', 'H4_low']].shift()).any(axis=1)]
-
-#     # Filter rows where Directional_bias and daily_momentum are both positive or both negative
-#     aligned_df = df[((df['Directional_bias'] > 0) & (df['daily_momentum'] > 0)) |
-#                     ((df['Directional_bias'] < 0) & (df['daily_momentum'] < 0))]
-    
-#     # Count number of successes in the aligned_df
-#     positive_aligned_success = aligned_df[(aligned_df['Directional_bias'] > 0) & (aligned_df['result'] == 1)].shape[0]
-#     negative_aligned_success = aligned_df[(aligned_df['Directional_bias'] < 0) & (aligned_df['result'] == -1)].shape[0]
-#     high_prob_success = positive_aligned_success + negative_aligned_success
-    
-#     # Calculate high probability success rate
-#     high_prob_rate = (high_prob_success / len(aligned_df)) * 100 if len(aligned_df) != 0 else 0
-
-#     # Exclude rows where Directional_bias and daily_momentum are aligned
-#     non_aligned_df = df[~((df['Directional_bias'] > 0) & (df['daily_momentum'] > 0)) &
-#                         ~((df['Directional_bias'] < 0) & (df['daily_momentum'] < 0))]
-
-#     # Calculate successful counts for Directional_bias from non_aligned_df
-#     positive_bias_success = non_aligned_df[(non_aligned_df['Directional_bias'] > 0) & (non_aligned_df['result'] == 1)].shape[0]
-#     negative_bias_success = non_aligned_df[(non_aligned_df['Directional_bias'] < 0) & (non_aligned_df['result'] == -1)].shape[0]
-#     total_bias_success = positive_bias_success + negative_bias_success
-#     Directional_bias_success_rate = (total_bias_success / len(non_aligned_df)) * 100 if len(non_aligned_df) != 0 else 0  # Handle potential division by zero
-    
-#     return high_prob_rate, Directional_bias_success_rate
-
 def run(df, Stop_Pips, currency):
     """Run the analysis. \n
     df = the 15 min price data including High, Open, Close, Low \n
@@ -1168,7 +1059,7 @@ def run(df, Stop_Pips, currency):
     #### Main Loop ###
     for  index, bar in tqdm(m15_data_fractal.iterrows()):
         check_limit(bar, currency)
-        check_close(bar)
+        check_close(bar, currency)
         check_15min_entry(bar, Stop_Pips, 5)
         if index in h4_data_fractal.index:
             h4_row = h4_data_fractal.loc[index]
@@ -1215,38 +1106,6 @@ df = pd.read_csv("C:\\Users\\hwatk\\Trading\\Backtesting-Code-2\\Historical Data
 # df = pd.read_csv("C:\\Users\\hwatk\\Trading\\Backtesting-Code-2\\Historical Data\\eurusd-m15-bid-2020-09-16-2023-09-16.csv")
 df = df.iloc[(-90000):]
 run(df, 0.0003, "EURUSD")
-
-# print('GBPUSD analysis')
-# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpusd-m15-bid-2020-09-16-2023-09-16.csv")
-# df = df.iloc[(-30000):]
-# # run(df, 0.0003, "GBPUSD")
-
-# print('USDCHF analysis')
-# df = pd.read_csv("C:\\Users\\hwatk\\Trading\\Backtesting-Code-2\\Historical Data\\usdchf-m15-bid-2020-09-16-2023-09-16.csv")
-# df = df.iloc[(-30000):]
-# run(df, 0.0003, "USDCHF")
-
-# print('AUDUSD analysis')
-# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/audusd-m15-bid-2020-09-16-2023-09-16.csv")
-# df = df.iloc[(-30000):]
-# run(df, 0.0003, "AUDUSD")
-
-# print('GBPJPY analysis')
-# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/gbpjpy-m15-bid-2020-09-16-2023-09-16.csv")
-# df = df.iloc[(-30000):]
-# run(df, 0.0005, "GBPJPY")
-
-# print('USDCAD analysis')
-# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/usdcad-m15-bid-2020-09-16-2023-09-16.csv")
-# df = df.iloc[(-30000):]
-# run(df, 0.0003, "USDCAD")
-
-# print('USDJPY analysis')
-# df = pd.read_csv("/Users/hugowatkinson/Documents/Trading/Historical Data/usdjpy-m15-bid-2020-09-16-2023-09-16.csv")
-# df = df.iloc[(-30000):]
-# run(df, 0.0003, "USDJPY")
-
-# plotH4(H4_record)
 
 if not os.path.exists(Path):
     os.makedirs(Path)

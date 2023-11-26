@@ -67,7 +67,12 @@ def create_candlestick_plot(trade, price_data, output_folder, num_bars_before):
                       template='plotly_dark')
 
     # Save the plot to the output folder
-    plot_filename = f"{output_folder}/candlestick_plot_{trade_start}_{trade_end}.html"
+    # Replace colons with underscores in the datetime portion of the filename
+    formatted_start = trade_start.strftime('%Y-%m-%d_%H-%M-%S')
+    formatted_end = trade_end.strftime('%Y-%m-%d_%H-%M-%S')
+
+    # Construct the filename with formatted datetime
+    plot_filename = f"{output_folder}/candlestick_plot_{formatted_start}_{formatted_end}.html"
     fig.write_html(plot_filename)
 
 # Function to process trades and create plots
@@ -109,9 +114,9 @@ def process_trades(order_list_file, price_data_file, output_folder, num_bars_bef
 
 if __name__ == "__main__":
     pair = 'eurusd'
-    order_list_file = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/Order_List.csv'
-    price_data_file = f'/Users/hugowatkinson/Documents/Trading/Historical Data/{pair}-m15-bid-2020-09-16-2023-09-16.csv'
-    output_folder = '/Users/hugowatkinson/Documents/Trading/Backtesting Code/Active/Output/output_plots'
-
+    order_list_file = r"C:\Users\hwatk\Trading\Backtesting-Code-2\Active\Output\Order_List.csv"
+    price_data_file = f'C:\\Users\\hwatk\\Trading\\Backtesting-Code-2\\Historical Data\\{pair}-m15-bid-2020-09-16-2023-09-16.csv'
+    output_folder = r"C:\Users\hwatk\Trading\Backtesting-Code-2\Active\Output\output_plots"
+   
 
     process_trades(order_list_file, price_data_file, output_folder, 30)
